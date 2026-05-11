@@ -1,0 +1,15 @@
+{
+  "id": "hello-python",
+  "title": "Hello Python",
+  "description": "A simple python snippet with a parameter",
+  "tags": ["python", "test"],
+  "type": "python",
+  "mainFile": "main.py",
+  "parameters": [
+    {
+      "name": "name",
+      "defaultValue": "World",
+      "description": "Name to greet"
+    }
+  ]
+}

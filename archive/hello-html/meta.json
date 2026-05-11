@@ -1,0 +1,15 @@
+{
+  "id": "hello-html",
+  "title": "Hello Web App",
+  "description": "Simple HTML web app",
+  "tags": ["html", "web"],
+  "type": "html",
+  "mainFile": "index.html",
+  "parameters": [
+    {
+      "name": "bg_color",
+      "defaultValue": "#f1c40f",
+      "description": "Background color"
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "id": "hello-cmd",
+  "title": "Hello CMD",
+  "description": "Simple CMD command",
+  "tags": ["cmd", "test"],
+  "type": "cmd",
+  "mainFile": "command.txt",
+  "parameters": [
+    {
+      "name": "msg",
+      "defaultValue": "Success",
+      "description": "Message to echo"
+    }
+  ]
+}
