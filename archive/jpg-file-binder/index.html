@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JPG 파일 바인더</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 커스텀 스타일 및 애니메이션 */
+        .fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center p-4 font-sans text-slate-800">
+
+    <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-8 space-y-8">
+        
+        <!-- 헤더 -->
+        <div class="text-center space-y-2">
+            <div class="mx-auto w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+            </div>
+            <h1 class="text-2xl font-bold text-slate-900">JPG 파일 바인더</h1>
+            <p class="text-sm text-slate-500">
+                정상적인 JPG 이미지 파일 뒤에 다른 파일을 숨깁니다.<br/>
+                결과물은 일반 이미지처럼 보이지만, 압축 프로그램으로 열면 숨겨진 파일을 볼 수 있습니다. (주로 ZIP 파일을 숨길 때 유용합니다.)
+            </p>
+        </div>
+
+        <div class="space-y-6">
+            <!-- 1. 커버 이미지 입력 -->
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">1. 겉으로 보여질 이미지 (JPG)</label>
+                <div class="relative border-2 border-dashed border-slate-300 rounded-xl p-4 hover:border-blue-500 transition-colors bg-slate-50">
+                    <input type="file" id="coverImage" accept="image/jpeg, image/jpg" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="updateFileInfo('coverImage', 'coverFileName')">
+                    <div class="flex items-center gap-3 pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span id="coverFileName" class="text-sm text-slate-600 font-medium">클릭하여 JPG 파일 선택...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. 숨길 파일 입력 -->
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-2">2. 숨기고 싶은 파일 (ZIP 등)</label>
+                <div class="relative border-2 border-dashed border-slate-300 rounded-xl p-4 hover:border-purple-500 transition-colors bg-slate-50">
+                    <input type="file" id="hiddenFile" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onchange="updateFileInfo('hiddenFile', 'hiddenFileName')">
+                    <div class="flex items-center gap-3 pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span id="hiddenFileName" class="text-sm text-slate-600 font-medium">클릭하여 숨길 파일 선택...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 메시지 출력 영역 -->
+            <div id="messageArea" class="hidden rounded-lg p-4 text-sm fade-in"></div>
+
+            <!-- 실행 버튼 -->
+            <button onclick="bindFiles()" class="w-full bg-slate-900 hover:bg-slate-800 text-white font-semibold py-3 px-4 rounded-xl transition-colors flex items-center justify-center gap-2 shadow-md">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                파일 결합 및 다운로드
+            </button>
+        </div>
+
+        <!-- 안내사항 -->
+        <div class="bg-yellow-50 rounded-lg p-4 text-xs text-yellow-800 border border-yellow-200">
+            <strong>💡 작동 원리 및 팁:</strong><br/>
+            JPG 포맷은 'FF D9' (End of Image) 마커 이후의 데이터를 무시합니다. 이 속성을 이용해 이미지 파일의 끝에 다른 파일의 바이트를 그대로 이어 붙입니다.<br/>
+            완성된 파일을 확인하려면 확장자를 <code>.zip</code>으로 변경하거나, 반디집 등 압축 프로그램으로 직접 열어보세요.
+        </div>
+
+    </div>
+
+    <script>
+        // 파일 선택 시 파일명 업데이트
+        function updateFileInfo(inputId, displayId) {
+            const fileInput = document.getElementById(inputId);
+            const displaySpan = document.getElementById(displayId);
+            
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                let size = (file.size / 1024).toFixed(2);
+                let unit = 'KB';
+                if (size > 1024) {
+                    size = (size / 1024).toFixed(2);
+                    unit = 'MB';
+                }
+                displaySpan.textContent = `${file.name} (${size} ${unit})`;
+                displaySpan.classList.add('text-slate-900');
+                displaySpan.classList.remove('text-slate-600');
+            } else {
+                displaySpan.textContent = "클릭하여 파일 선택...";
+                displaySpan.classList.remove('text-slate-900');
+                displaySpan.classList.add('text-slate-600');
+            }
+        }
+
+        // 메시지 표시 함수
+        function showMessage(msg, type = 'error') {
+            const messageArea = document.getElementById('messageArea');
+            messageArea.className = 'rounded-lg p-4 text-sm fade-in block';
+            
+            if (type === 'error') {
+                messageArea.classList.add('bg-red-50', 'text-red-700', 'border', 'border-red-200');
+                messageArea.classList.remove('bg-green-50', 'text-green-700', 'border-green-200');
+            } else {
+                messageArea.classList.add('bg-green-50', 'text-green-700', 'border', 'border-green-200');
+                messageArea.classList.remove('bg-red-50', 'text-red-700', 'border-red-200');
+            }
+            
+            messageArea.textContent = msg;
+        }
+
+        // 파일 결합 메인 로직
+        async function bindFiles() {
+            const coverInput = document.getElementById('coverImage');
+            const hiddenInput = document.getElementById('hiddenFile');
+
+            if (coverInput.files.length === 0) {
+                showMessage("겉으로 보여질 JPG 이미지를 선택해주세요.");
+                return;
+            }
+            
+            if (hiddenInput.files.length === 0) {
+                showMessage("숨기고 싶은 파일을 선택해주세요.");
+                return;
+            }
+
+            const coverFile = coverInput.files[0];
+            const hiddenFile = hiddenInput.files[0];
+
+            if (!coverFile.type.match('image/jpeg')) {
+                showMessage("커버 이미지는 반드시 JPG/JPEG 형식이어야 합니다.");
+                return;
+            }
+
+            try {
+                // 1. 두 파일의 데이터를 ArrayBuffer로 읽기
+                const coverBuffer = await coverFile.arrayBuffer();
+                const hiddenBuffer = await hiddenFile.arrayBuffer();
+
+                // 2. Blob을 사용하여 두 버퍼를 순서대로 결합
+                // 브라우저의 Blob API가 배열로 넘겨진 데이터를 자동으로 이어붙여 줍니다.
+                const combinedBlob = new Blob([coverBuffer, hiddenBuffer], { type: 'image/jpeg' });
+
+                // 3. 결합된 파일을 다운로드할 수 있도록 Object URL 생성
+                const downloadUrl = URL.createObjectURL(combinedBlob);
+
+                // 4. 임시 <a> 태그를 만들어 다운로드 트리거
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = `bound_${coverFile.name}`;
+                document.body.appendChild(a);
+                a.click();
+                
+                // 5. 메모리 정리
+                document.body.removeChild(a);
+                URL.revokeObjectURL(downloadUrl);
+
+                showMessage("성공적으로 파일이 결합되어 다운로드가 시작되었습니다!", "success");
+
+            } catch (error) {
+                console.error(error);
+                showMessage("파일을 결합하는 중 오류가 발생했습니다.");
+            }
+        }
+    </script>
+</body>
+</html>

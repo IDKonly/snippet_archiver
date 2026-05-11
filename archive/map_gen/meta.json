@@ -1,0 +1,9 @@
+{
+  "id": "map_gen",
+  "title": "절차적 판타지 지도 생성기",
+  "description": "절차적 판타지 지도 생성기",
+  "tags": [],
+  "type": "html",
+  "mainFile": "index.html",
+  "parameters": []
+}

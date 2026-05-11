@@ -1,0 +1,11 @@
+{
+  "id": "repro-react-test",
+  "title": "Repro React Error",
+  "description": "Testing JSX in Node engine",
+  "tags": [
+    "test"
+  ],
+  "type": "javascript",
+  "mainFile": "main.js",
+  "parameters": []
+}

@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>절차적 판타지 지도 생성기 (Perceptual Realism)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        canvas {
+            image-rendering: pixelated; 
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .step-indicator.active { background-color: #3b82f6; color: white; border-color: #3b82f6; }
+        .step-indicator.completed { background-color: #10b981; color: white; border-color: #10b981; }
+    </style>
+</head>
+<body class="bg-slate-50 h-screen flex overflow-hidden font-sans">
+
+    <!-- 사이드바 (컨트롤 패널) -->
+    <div class="w-80 bg-white p-6 shadow-xl flex flex-col z-10 overflow-y-auto">
+        <h1 class="text-2xl font-bold text-slate-800 mb-2">판타지 맵 제너레이터</h1>
+        <p class="text-sm text-slate-500 mb-6">시각적 사실주의 (Perceptual Realism) 기반</p>
+
+        <!-- 파라미터 컨트롤 -->
+        <div class="space-y-6 flex-grow">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">대륙 스케일 (Continental Scale)</label>
+                <input type="range" id="param-scale" min="20" max="200" value="120" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                <div class="flex justify-between text-xs text-slate-400 mt-1"><span>군도형</span><span>초대륙형</span></div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">지각 판 개수 (Plate Count)</label>
+                <input type="range" id="param-plates" min="5" max="60" value="25" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                <div class="flex justify-between text-xs text-slate-400 mt-1"><span>5개</span><span>60개</span></div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">산맥 험준함 (Mountain Roughness)</label>
+                <input type="range" id="param-roughness" min="10" max="100" value="60" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                <div class="flex justify-between text-xs text-slate-400 mt-1"><span>완만함</span><span>매우 가파름</span></div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">수계 밀도 (River Density)</label>
+                <input type="range" id="param-rivers" min="100" max="5000" value="2000" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                <div class="flex justify-between text-xs text-slate-400 mt-1"><span>적음</span><span>많음</span></div>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">초기 국가 스폰 (Base Nations)</label>
+                <input type="range" id="param-nations" min="0" max="30" value="12" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                <div class="flex justify-between text-xs text-slate-400 mt-1"><span>0개</span><span>30개</span></div>
+            </div>
+            
+            <div class="p-4 bg-slate-100 rounded-lg border border-slate-200">
+                <h3 class="text-sm font-bold text-slate-800 mb-2" id="info-title">대기 중</h3>
+                <p class="text-xs text-slate-600 leading-relaxed" id="info-desc">
+                    [다음 단계]를 클릭하여 절차적 생성을 시작하세요.
+                </p>
+            </div>
+        </div>
+
+        <div class="mt-4 space-y-2">
+            <button id="btn-next" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-200 shadow-md">
+                다음 단계 ➔
+            </button>
+            <button id="btn-reset" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 px-4 rounded-lg transition duration-200">
+                초기화 및 시드 변경
+            </button>
+        </div>
+    </div>
+
+    <!-- 메인 뷰어 -->
+    <div class="flex-1 flex flex-col relative bg-slate-800">
+        <!-- 상단 스텝 인디케이터 -->
+        <div class="absolute top-0 left-0 right-0 p-6 flex justify-center items-center space-x-1 z-10 pointer-events-none scale-90 origin-top">
+            <div id="step-0" class="step-indicator px-3 py-1.5 text-sm rounded-full border-2 border-slate-400 bg-slate-700 text-slate-300 font-semibold shadow-md transition-all">1. 뼈대</div>
+            <div class="w-3 border-t-2 border-slate-400"></div>
+            <div id="step-1" class="step-indicator px-3 py-1.5 text-sm rounded-full border-2 border-slate-400 bg-slate-700 text-slate-300 font-semibold shadow-md transition-all">2. 지각 판</div>
+            <div class="w-3 border-t-2 border-slate-400"></div>
+            <div id="step-2" class="step-indicator px-3 py-1.5 text-sm rounded-full border-2 border-slate-400 bg-slate-700 text-slate-300 font-semibold shadow-md transition-all">3. 산맥</div>
+            <div class="w-3 border-t-2 border-slate-400"></div>
+            <div id="step-3" class="step-indicator px-3 py-1.5 text-sm rounded-full border-2 border-slate-400 bg-slate-700 text-slate-300 font-semibold shadow-md transition-all">4. 강(Rivers)</div>
+            <div class="w-3 border-t-2 border-slate-400"></div>
+            <div id="step-4" class="step-indicator px-3 py-1.5 text-sm rounded-full border-2 border-slate-400 bg-slate-700 text-slate-300 font-semibold shadow-md transition-all">5. 기후</div>
+            <div class="w-3 border-t-2 border-slate-400"></div>
+            <div id="step-5" class="step-indicator px-3 py-1.5 text-sm rounded-full border-2 border-slate-400 bg-slate-700 text-slate-300 font-semibold shadow-md transition-all">6. 판도/역사</div>
+        </div>
+
+        <!-- 캔버스 영역 -->
+        <div class="flex-1 flex items-center justify-center p-10 overflow-auto">
+            <canvas id="simCanvas" width="800" height="533" class="bg-black rounded-lg w-full max-w-5xl h-auto aspect-[3/2]"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // 에러 발생 시 UI에 즉시 표시되도록 예외 처리기 추가
+        window.addEventListener('error', function(e) {
+            const title = document.getElementById('info-title');
+            const desc = document.getElementById('info-desc');
+            if (title && desc) {
+                title.textContent = "⚠️ 시스템 오류 발생";
+                desc.textContent = e.message;
+                desc.classList.add('text-red-500', 'font-bold');
+            }
+        });
+
+        // --- 1. 내장 Simplex Noise (CDN 로드 실패 방지용) ---
+        const F2 = 0.5 * (Math.sqrt(3.0) - 1.0);
+        const G2 = (3.0 - Math.sqrt(3.0)) / 6.0;
+        const p = new Uint8Array(256);
+        const perm = new Uint8Array(512);
+        const permMod12 = new Uint8Array(512);
+
+        function reseedNoise() {
+            for (let i=0; i<256; i++) p[i] = Math.floor(Math.random()*256);
+            for (let i=0; i<512; i++) {
+                perm[i] = p[i & 255];
+                permMod12[i] = (perm[i] % 12);
+            }
+        }
+        reseedNoise(); // 초기 노이즈 시드 생성
+
+        function dot(g, x, y) {
+            const grad3 = [[1,1,0],[-1,1,0],[1,-1,0],[-1,-1,0],[1,0,1],[-1,0,1],[1,0,-1],[-1,0,-1],[0,1,1],[0,-1,1],[0,1,-1],[0,-1,-1]];
+            return grad3[g][0] * x + grad3[g][1] * y;
+        }
+
+        function noise2D(xin, yin) {
+            let n0, n1, n2; 
+            let s = (xin + yin) * F2;
+            let i = Math.floor(xin + s), j = Math.floor(yin + s);
+            let t = (i + j) * G2;
+            let X0 = i - t, Y0 = j - t;
+            let x0 = xin - X0, y0 = yin - Y0;
+            let i1, j1;
+            if(x0 > y0) {i1=1; j1=0;} else {i1=0; j1=1;}
+            let x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+            let x2 = x0 - 1.0 + 2.0 * G2, y2 = y0 - 1.0 + 2.0 * G2;
+            let ii = i & 255, jj = j & 255;
+            let gi0 = permMod12[ii + perm[jj]], gi1 = permMod12[ii + i1 + perm[jj + j1]], gi2 = permMod12[ii + 1 + perm[jj + 1]];
+            let t0 = 0.5 - x0*x0 - y0*y0;
+            if(t0 < 0) n0 = 0.0; else { t0 *= t0; n0 = t0 * t0 * dot(gi0, x0, y0); }
+            let t1 = 0.5 - x1*x1 - y1*y1;
+            if(t1 < 0) n1 = 0.0; else { t1 *= t1; n1 = t1 * t1 * dot(gi1, x1, y1); }
+            let t2 = 0.5 - x2*x2 - y2*y2;
+            if(t2 < 0) n2 = 0.0; else { t2 *= t2; n2 = t2 * t2 * dot(gi2, x2, y2); }
+            return 70.0 * (n0 + n1 + n2);
+        }
+
+
+        // --- 2. 설정 및 글로벌 변수 ---
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+        const SEA_LEVEL = 0.45; 
+        
+        let currentStep = -1;
+        let isAnimating = false; 
+        let globalLoop = null; 
+
+        const simData = {
+            baseElevation: new Float32Array(width * height),
+            finalElevation: new Float32Array(width * height),
+            plateMap: new Int32Array(width * height),
+            boundaryDist: new Float32Array(width * height),
+            riverMap: new Float32Array(width * height),
+            biomeMap: new Int8Array(width * height),
+            nationMap: new Int32Array(width * height),
+            lordMap: new Int32Array(width * height), 
+            plates: [],
+            nations: [],
+            lords: [], 
+            baseTerrainPixels: null, 
+            historyYear: 0
+        };
+
+        const ui = {
+            scale: document.getElementById('param-scale'),
+            plates: document.getElementById('param-plates'),
+            roughness: document.getElementById('param-roughness'),
+            rivers: document.getElementById('param-rivers'),
+            nations: document.getElementById('param-nations'),
+            btnNext: document.getElementById('btn-next'),
+            btnReset: document.getElementById('btn-reset'),
+            infoTitle: document.getElementById('info-title'),
+            infoDesc: document.getElementById('info-desc'),
+            steps: [
+                document.getElementById('step-0'), document.getElementById('step-1'),
+                document.getElementById('step-2'), document.getElementById('step-3'),
+                document.getElementById('step-4'), document.getElementById('step-5')
+            ]
+        };
+
+        const stepInfo = [
+            { title: "1. 대륙 뼈대 (FBM & Vignette)", desc: "프랙탈 노이즈와 마스킹 기법을 합성하여 시각적으로 안정감 있는 중앙 집중형 초대륙의 뼈대를 생성합니다." },
+            { title: "2. 지각 판 분할 (Domain Warping)", desc: "보로노이 분할에 강력한 노이즈 왜곡을 가하여, 마치 찢겨진 듯한 자연스러운 리아스식 경계선을 즉시 만들어냅니다." },
+            { title: "3. 험준한 산맥 (Ridged Noise)", desc: "물리 연산을 배제하고 수학적 트릭을 씁니다! 판의 경계선에 다가갈수록 날카로운 노이즈를 솟아오르게 하여 산맥을 생성합니다." },
+            { title: "4. 수계 생성 (Steepest Descent)", desc: "고지대에 비를 뿌려 가장 가파른 곳으로 흐르게 합니다. 노이즈 기반 지형을 따라 핏줄처럼 얽힌 강이 형성됩니다." },
+            { title: "5. 기후와 렌더링 (Biome Colors)", desc: "위도와 고도, 습도를 계산해 양피지 위에 그려진 환상적인 정치/지형도 색상 맵핑을 입힙니다." },
+            { title: "6. 연속 지정학 시뮬레이션", desc: "역사는 멈추지 않습니다! 국가가 팽창하고, 분열하고, 새 제국이 탄생하는 과정이 끊임없이 반복됩니다. [일시정지] 버튼을 눌러 감상하세요." }
+        ];
+
+        // --- 3. 헬퍼 알고리즘 ---
+        function getIndex(x, y) { return y * width + x; }
+        
+        function setPixel(imgData, x, y, r, g, b, a = 255) {
+            const index = (y * width + x) * 4;
+            imgData.data[index] = r; imgData.data[index+1] = g;
+            imgData.data[index+2] = b; imgData.data[index+3] = a;
+        }
+
+        function fbm(x, y, octaves, scale) {
+            let total = 0, frequency = 1 / scale, amplitude = 1, maxValue = 0;
+            for(let i = 0; i < octaves; i++) {
+                total += ((noise2D(x * frequency, y * frequency) + 1) / 2) * amplitude;
+                maxValue += amplitude; amplitude *= 0.5; frequency *= 2;
+            }
+            return total / maxValue;
+        }
+
+        function ridgedNoise(x, y, octaves, scale) {
+            let total = 0, frequency = 1 / scale, amplitude = 1, maxValue = 0;
+            for(let i = 0; i < octaves; i++) {
+                let n = 1.0 - Math.abs(noise2D(x * frequency, y * frequency));
+                n = n * n; 
+                total += n * amplitude;
+                maxValue += amplitude; amplitude *= 0.5; frequency *= 2;
+            }
+            return total / maxValue;
+        }
+
+        function lerpColor(c1, c2, t) {
+            return [
+                Math.round(c1[0] + (c2[0] - c1[0]) * t),
+                Math.round(c1[1] + (c2[1] - c1[1]) * t),
+                Math.round(c1[2] + (c2[2] - c1[2]) * t)
+            ];
+        }
+
+        // --- 4. 시뮬레이션 단계별 로직 ---
+
+        function stepBaseElevation() {
+            const scale = parseFloat(ui.scale.value);
+            const normalizedScale = (scale - 20) / 180;
+            
+            const imgData = ctx.createImageData(width, height);
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const nx = x/width - 0.5, ny = y/height - 0.5;
+                    let vignette = 1 - Math.pow(Math.sqrt(nx*nx + ny*ny) * 2, 2.0); 
+                    if (vignette < 0) vignette = 0;
+
+                    const vignetteStrength = 0.1 + (normalizedScale * 0.35);
+                    let elev = fbm(x, y, 6, scale) * (1 - vignetteStrength) + vignette * vignetteStrength;
+                    elev -= (1 - normalizedScale) * 0.08;
+
+                    simData.baseElevation[getIndex(x, y)] = elev;
+                    simData.finalElevation[getIndex(x, y)] = elev;
+                    
+                    const c = Math.floor(elev * 255);
+                    setPixel(imgData, x, y, c, c, c);
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function stepPlates() {
+            const numPlates = parseInt(ui.plates.value);
+            simData.plates = [];
+            for (let i = 0; i < numPlates; i++) {
+                simData.plates.push({
+                    id: i, cx: Math.floor(Math.random() * width), cy: Math.floor(Math.random() * height),
+                    color: [Math.random()*150+50, Math.random()*150+50, Math.random()*150+50]
+                });
+            }
+
+            const imgData = ctx.getImageData(0, 0, width, height);
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = getIndex(x, y);
+                    const warpX = x + fbm(x, y, 3, 50) * 80;
+                    const warpY = y + fbm(x+1000, y+1000, 3, 50) * 80;
+
+                    let minDist = Infinity, secondMinDist = Infinity, closest = 0;
+                    for (let i = 0; i < numPlates; i++) {
+                        const dist = Math.sqrt((simData.plates[i].cx - warpX)**2 + (simData.plates[i].cy - warpY)**2);
+                        if (dist < minDist) { secondMinDist = minDist; minDist = dist; closest = i; }
+                        else if (dist < secondMinDist) { secondMinDist = dist; }
+                    }
+                    simData.plateMap[idx] = closest;
+                    simData.boundaryDist[idx] = secondMinDist - minDist; 
+                    
+                    const elev = simData.baseElevation[idx];
+                    const pColor = simData.plates[closest].color;
+                    setPixel(imgData, x, y, pColor[0]*elev, pColor[1]*elev, pColor[2]*elev);
+                }
+            }
+            for (let i = 0; i < simData.boundaryDist.length; i++) {
+                if (simData.boundaryDist[i] < 3) setPixel(imgData, i%width, Math.floor(i/width), 255, 255, 255);
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function stepRidges() {
+            const roughness = parseInt(ui.roughness.value) / 100;
+            const imgData = ctx.createImageData(width, height);
+            const boundaryThreshold = 40; 
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = getIndex(x, y);
+                    let elev = simData.baseElevation[idx];
+                    let bDist = simData.boundaryDist[idx];
+
+                    if (elev >= SEA_LEVEL - 0.1 && bDist < boundaryThreshold) {
+                        let intensity = 1.0 - (bDist / boundaryThreshold);
+                        intensity = intensity * intensity * (3 - 2 * intensity);
+                        elev += ridgedNoise(x, y, 5, 40) * intensity * roughness * 0.8;
+                    }
+                    if (elev > 1) elev = 1;
+                    simData.finalElevation[idx] = elev;
+
+                    const c = Math.floor(elev * 255);
+                    setPixel(imgData, x, y, elev < SEA_LEVEL ? 0 : c, elev < SEA_LEVEL ? 0 : c, c);
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function stepRivers() {
+            simData.riverMap.fill(0);
+            const riverCount = parseInt(ui.rivers.value);
+            for (let i = 0; i < riverCount; i++) {
+                let x = Math.floor(Math.random() * width), y = Math.floor(Math.random() * height);
+                if (simData.finalElevation[getIndex(x, y)] > SEA_LEVEL + 0.05) {
+                    let volume = 1;
+                    for (let step = 0; step < 300; step++) {
+                        let currentElev = simData.finalElevation[getIndex(x, y)];
+                        simData.riverMap[getIndex(x, y)] += volume;
+                        if (currentElev < SEA_LEVEL) break; 
+                        
+                        let nextX = x, nextY = y, minElev = currentElev;
+                        const neighbors = [{dx:0,dy:-1},{dx:1,dy:-1},{dx:1,dy:0},{dx:1,dy:1},{dx:0,dy:1},{dx:-1,dy:1},{dx:-1,dy:0},{dx:-1,dy:-1}];
+                        for (let n of neighbors) {
+                            let nx = x + n.dx, ny = y + n.dy;
+                            if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                let e = simData.finalElevation[getIndex(nx, ny)];
+                                if (e < minElev) { minElev = e; nextX = nx; nextY = ny; }
+                            }
+                        }
+                        if (nextX === x && nextY === y) break;
+                        x = nextX; y = nextY; volume += 0.15;
+                    }
+                }
+            }
+            
+            const imgData = ctx.getImageData(0, 0, width, height);
+            for (let i = 0; i < width * height; i++) {
+                if (simData.riverMap[i] > 2.5) setPixel(imgData, i%width, Math.floor(i/width), 0, 150, 255);
+            }
+            ctx.putImageData(imgData, 0, 0);
+        }
+
+        function stepClimate() {
+            const imgData = ctx.createImageData(width, height);
+            simData.biomeMap.fill(0);
+            const palettes = {
+                oceanD: [25,60,110], oceanS: [60,140,190], beach: [240,220,160],
+                plains: [120,170,90], forest: [50,120,60], desert: [220,190,120],
+                tundra: [160,170,160], mountain: [110,100,90], snow: [245,245,250]
+            };
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = getIndex(x, y);
+                    const elev = simData.finalElevation[idx];
+
+                    if (elev < SEA_LEVEL) {
+                        let col = lerpColor(palettes.oceanD, palettes.oceanS, Math.max(0, (elev - (SEA_LEVEL - 0.2)) / 0.2));
+                        setPixel(imgData, x, y, col[0], col[1], col[2]);
+                        continue;
+                    }
+
+                    let temp = Math.max(0, Math.min(1, 1.0 - (Math.abs(y - height / 2) / (height / 2)) - (elev - SEA_LEVEL) * 2.0));
+                    let moisture = fbm(x, y, 4, 150) * 0.7 + (simData.riverMap[idx] > 0 ? 0.5 : 0);
+
+                    let r, g, b;
+                    if (elev < SEA_LEVEL + 0.02) { [r, g, b] = palettes.beach; }
+                    else if (elev > 0.85) { [r, g, b] = palettes.snow; simData.biomeMap[idx] = 1; }
+                    else if (elev > 0.7) { [r, g, b] = palettes.mountain; simData.biomeMap[idx] = 1; }
+                    else if (temp < 0.3) { [r, g, b] = palettes.tundra; simData.biomeMap[idx] = 2; }
+                    else if (temp > 0.6 && moisture < 0.4) { [r, g, b] = palettes.desert; simData.biomeMap[idx] = 3; }
+                    else if (moisture > 0.55) { [r, g, b] = palettes.forest; simData.biomeMap[idx] = 4; }
+                    else { [r, g, b] = palettes.plains; simData.biomeMap[idx] = 5; }
+
+                    if (simData.riverMap[idx] > 3.0) { r = 40; g = 140; b = 220; }
+
+                    if (x > 0 && y > 0 && elev >= SEA_LEVEL) {
+                        const shadow = 1 + (elev - simData.finalElevation[getIndex(x-1, y-1)]) * 4.0;
+                        r = Math.min(255, Math.max(0, r * shadow)); g = Math.min(255, Math.max(0, g * shadow)); b = Math.min(255, Math.max(0, b * shadow));
+                    }
+                    setPixel(imgData, x, y, r, g, b);
+                }
+            }
+            ctx.putImageData(imgData, 0, 0);
+            simData.baseTerrainPixels = new Uint8ClampedArray(imgData.data);
+        }
+
+        // --- Step 6: 무한 루프 역사 시뮬레이션 ---
+        function stepNationsAndHistoryAsync() {
+            simData.nationMap.fill(-1);
+            simData.lordMap.fill(-1);
+            simData.nations = [];
+            simData.lords = [];
+            simData.historyYear = 0;
+
+            const imgData = ctx.getImageData(0, 0, width, height);
+
+            const nationCount = parseInt(ui.nations.value);
+            for (let i = 0; i < nationCount; i++) {
+                let cx, cy, valid = false, attempts = 0;
+                while (!valid && attempts < 1000) {
+                    cx = Math.floor(Math.random() * width); cy = Math.floor(Math.random() * height);
+                    const elev = simData.finalElevation[getIndex(cx, cy)];
+                    const biome = simData.biomeMap[getIndex(cx, cy)];
+                    if (elev >= SEA_LEVEL && elev < 0.65 && biome !== 1 && biome !== 3) {
+                        valid = true;
+                        for (let n of simData.nations) if (Math.hypot(n.cx - cx, n.cy - cy) < 60) valid = false; 
+                    }
+                    attempts++;
+                }
+                if (valid) {
+                    const randState = Math.random();
+                    let state = randState < 0.25 ? 'Golden' : (randState < 0.60 ? 'Decline' : 'Normal');
+                    const angle = Math.random() * Math.PI * 2;
+                    simData.nations.push({
+                        id: i, cx: cx, cy: cy,
+                        color: [Math.floor(Math.random()*180+60), Math.floor(Math.random()*180+60), Math.floor(Math.random()*180+60)],
+                        state: state, focusX: Math.cos(angle), focusY: Math.sin(angle),
+                        fronts: [{x: cx, y: cy}], size: 1
+                    });
+                    simData.nationMap[getIndex(cx, cy)] = i;
+                }
+            }
+
+            let simPhase = 1; 
+            let costMap = new Float32Array(width * height).fill(Infinity);
+            
+            simData.nations.forEach(n => {
+                costMap[getIndex(n.cx, n.cy)] = 0;
+            });
+
+            isAnimating = true;
+            updateUI(); 
+
+            function loop() {
+                if (!isAnimating) return;
+
+                let processed = 0;
+                const NODES_PER_TICK = 25000;
+
+                // --- Phase 1: 유기적 제국 확장 및 전쟁 (정복) ---
+                if (simPhase === 1) {
+                    let isExpanding = false;
+
+                    simData.nations.forEach(n => {
+                        let maxSize = n.state === 'Golden' ? 22000 : (n.state === 'Decline' ? 4000 : 12000);
+                        if (n.size >= maxSize || n.fronts.length === 0) return;
+                        
+                        isExpanding = true;
+
+                        const drift = (Math.random() - 0.5) * 0.3;
+                        const currentAngle = Math.atan2(n.focusY, n.focusX);
+                        n.focusX = Math.cos(currentAngle + drift);
+                        n.focusY = Math.sin(currentAngle + drift);
+
+                        let expandCount = Math.min(n.fronts.length, n.state === 'Golden' ? 120 : 50);
+
+                        for (let i = 0; i < expandCount; i++) {
+                            let frontIdx = Math.floor(Math.random() * n.fronts.length);
+                            let cur = n.fronts[frontIdx];
+                            let curIdx = getIndex(cur.x, cur.y);
+                            let bestNeighbor = null;
+                            let lowestCost = Infinity;
+
+                            const neighbors = [
+                                {dx:0,dy:-1}, {dx:1,dy:0}, {dx:0,dy:1}, {dx:-1,dy:0},
+                                {dx:1,dy:-1}, {dx:1,dy:1}, {dx:-1,dy:1}, {dx:-1,dy:-1}
+                            ];
+
+                            for (let neighbor of neighbors) {
+                                const nx = cur.x + neighbor.dx, ny = cur.y + neighbor.dy;
+                                if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                    const nIdx = getIndex(nx, ny);
+                                    if (simData.finalElevation[nIdx] < SEA_LEVEL) continue; 
+
+                                    let targetId = simData.nationMap[nIdx];
+                                    let isEnemy = targetId !== -1 && targetId !== n.id;
+                                    let targetNation = isEnemy ? simData.nations[targetId] : null;
+
+                                    let warCost = 0;
+                                    if (isEnemy && targetNation) {
+                                        let myPow = n.state === 'Golden' ? 3 : (n.state === 'Normal' ? 2 : 1);
+                                        let enPow = targetNation.state === 'Golden' ? 3 : (targetNation.state === 'Normal' ? 2 : 1);
+                                        
+                                        if (myPow > enPow || (myPow === enPow && Math.random() < 0.05)) {
+                                            warCost = 150 + (enPow * 50); 
+                                        } else {
+                                            continue; 
+                                        }
+                                    }
+
+                                    const nElev = simData.finalElevation[nIdx];
+                                    const elevDiff = Math.abs(nElev - simData.finalElevation[curIdx]);
+                                    let terrainCost = 1 + elevDiff * 30; 
+                                    if (nElev > 0.65) terrainCost += 25; 
+                                    if (simData.riverMap[nIdx] > 1.0) terrainCost += 15; 
+
+                                    let dirX = nx - cur.x, dirY = ny - cur.y;
+                                    let len = Math.hypot(dirX, dirY);
+                                    dirX /= len; dirY /= len;
+                                    let alignment = (dirX * n.focusX + dirY * n.focusY); 
+                                    let dirPenalty = (1 - alignment) * 3; 
+
+                                    let totalCost = terrainCost + dirPenalty + Math.random() * 4 + warCost;
+
+                                    if (totalCost < lowestCost) {
+                                        lowestCost = totalCost;
+                                        bestNeighbor = {x: nx, y: ny, idx: nIdx, isEnemy: isEnemy, oldOwner: targetNation};
+                                    }
+                                }
+                            }
+
+                            if (bestNeighbor) {
+                                let conquerCost = costMap[curIdx] + lowestCost; 
+                                
+                                if (bestNeighbor.isEnemy) {
+                                    if (conquerCost < 1800) { 
+                                        simData.nationMap[bestNeighbor.idx] = n.id;
+                                        costMap[bestNeighbor.idx] = conquerCost; 
+                                        n.fronts.push(bestNeighbor);
+                                        n.size++;
+                                        if(bestNeighbor.oldOwner) bestNeighbor.oldOwner.size--;
+                                    }
+                                } else {
+                                    if (conquerCost < costMap[bestNeighbor.idx] && conquerCost < 1800) {
+                                        simData.nationMap[bestNeighbor.idx] = n.id;
+                                        costMap[bestNeighbor.idx] = conquerCost;
+                                        n.fronts.push(bestNeighbor);
+                                        n.size++;
+                                    }
+                                }
+
+                                const pIdx = bestNeighbor.idx * 4;
+                                const baseR = simData.baseTerrainPixels[pIdx];
+                                const baseG = simData.baseTerrainPixels[pIdx+1];
+                                const baseB = simData.baseTerrainPixels[pIdx+2];
+                                const col = n.color;
+                                imgData.data[pIdx] = (baseR * 0.65) + (col[0] * 0.35);
+                                imgData.data[pIdx+1] = (baseG * 0.65) + (col[1] * 0.35);
+                                imgData.data[pIdx+2] = (baseB * 0.65) + (col[2] * 0.35);
+                            } else {
+                                n.fronts[frontIdx] = n.fronts[n.fronts.length - 1];
+                                n.fronts.pop();
+                            }
+                        }
+                    });
+
+                    if (!isExpanding) simPhase = 2; 
+                } 
+                // --- Phase 2: 호족(하위 영주) 스폰 ---
+                else if (simPhase === 2) {
+                    let lordIdCounter = 0;
+                    simData.lords = [];
+                    simData.lordMap.fill(-1);
+
+                    simData.nations.forEach(nation => {
+                        if (nation.size < 50) return; 
+                        simData.lords.push({
+                            id: lordIdCounter++, nationId: nation.id, cx: nation.cx, cy: nation.cy,
+                            color: nation.color, isCapital: true, isRebel: false, fronts: [{x: nation.cx, y: nation.cy}]
+                        });
+
+                        let peripherals = [];
+                        for(let y=0; y<height; y+=4) { 
+                            for(let x=0; x<width; x+=4) {
+                                const idx = getIndex(x,y);
+                                if(simData.nationMap[idx] === nation.id) {
+                                    let dist = Math.hypot(x - nation.cx, y - nation.cy);
+                                    let isMountain = simData.finalElevation[idx] > 0.65;
+                                    let threshold = nation.state === 'Golden' ? 200 : (nation.state === 'Decline' ? 60 : 120);
+                                    if (isMountain) threshold *= 0.6; 
+                                    if (dist > threshold) peripherals.push({x, y});
+                                }
+                            }
+                        }
+
+                        let spawnRate = nation.state === 'Decline' ? 50 : 250; 
+                        let numLords = Math.floor(peripherals.length / spawnRate);
+
+                        for(let i=0; i<numLords; i++) {
+                            if(peripherals.length === 0) break;
+                            let pick = peripherals[Math.floor(Math.random()*peripherals.length)];
+                            let valid = true;
+                            for(let l of simData.lords) {
+                                if(Math.hypot(l.cx - pick.x, l.cy - pick.y) < 30) { valid = false; break; }
+                            }
+                            if(valid) {
+                                let isRebel = false;
+                                let lColor = [
+                                    Math.max(0, Math.min(255, nation.color[0] + (Math.random()*60-30))),
+                                    Math.max(0, Math.min(255, nation.color[1] + (Math.random()*60-30))),
+                                    Math.max(0, Math.min(255, nation.color[2] + (Math.random()*60-30)))
+                                ];
+                                if(nation.state === 'Decline' && Math.random() < 0.6) {
+                                    isRebel = true;
+                                    lColor = [Math.floor(Math.random()*220+35), Math.floor(Math.random()*220+35), Math.floor(Math.random()*220+35)];
+                                }
+                                simData.lords.push({
+                                    id: lordIdCounter++, nationId: nation.id, cx: pick.x, cy: pick.y,
+                                    color: lColor, isCapital: false, isRebel: isRebel, fronts: [{x: pick.x, y: pick.y}]
+                                });
+                            }
+                        }
+                    });
+
+                    simData.lords.forEach(l => { simData.lordMap[getIndex(l.cx, l.cy)] = l.id; });
+                    simPhase = 3;
+                }
+                // --- Phase 3: 호족 영지 내부 분할 ---
+                else if (simPhase === 3) {
+                    let isExpanding = false;
+                    simData.lords.forEach(lord => {
+                        if (lord.fronts.length === 0) return;
+                        isExpanding = true;
+                        let expandCount = Math.min(lord.fronts.length, 60);
+
+                        for (let i = 0; i < expandCount; i++) {
+                            let frontIdx = Math.floor(Math.random() * lord.fronts.length);
+                            let cur = lord.fronts[frontIdx];
+                            let validNeighbors = [];
+                            const neighbors = [{dx:0,dy:-1}, {dx:1,dy:0}, {dx:0,dy:1}, {dx:-1,dy:0}];
+                            
+                            for (let neighbor of neighbors) {
+                                const nx = cur.x + neighbor.dx, ny = cur.y + neighbor.dy;
+                                if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                                    const nIdx = getIndex(nx, ny);
+                                    if (simData.nationMap[nIdx] === lord.nationId && simData.lordMap[nIdx] === -1) {
+                                        validNeighbors.push({x: nx, y: ny, idx: nIdx});
+                                    }
+                                }
+                            }
+
+                            if (validNeighbors.length > 0) {
+                                let bestNeighbor = validNeighbors[Math.floor(Math.random() * validNeighbors.length)];
+                                simData.lordMap[bestNeighbor.idx] = lord.id;
+                                lord.fronts.push(bestNeighbor);
+
+                                const pIdx = bestNeighbor.idx * 4;
+                                if ((bestNeighbor.x+bestNeighbor.y)%2===0) {
+                                    imgData.data[pIdx] = Math.max(0, imgData.data[pIdx] - 10);
+                                    imgData.data[pIdx+1] = Math.max(0, imgData.data[pIdx+1] - 10);
+                                    imgData.data[pIdx+2] = Math.max(0, imgData.data[pIdx+2] - 10);
+                                }
+                            } else {
+                                lord.fronts[frontIdx] = lord.fronts[lord.fronts.length - 1];
+                                lord.fronts.pop();
+                            }
+                        }
+                    });
+
+                    if (!isExpanding) simPhase = 4;
+                }
+                // --- Phase 4: 반란군 독립 (발칸화) ---
+                else if (simPhase === 4) {
+                    for(let i=0; i<width*height; i++) {
+                        const lId = simData.lordMap[i];
+                        if(lId !== -1 && simData.lords[lId].isRebel) simData.nationMap[i] = -lId - 10; 
+                    }
+                    renderFinalBorders();
+                    simData.historyYear += 50; 
+                    simPhase = 5; 
+                }
+                // --- Phase 5: 무한 루프 재정립 ---
+                else if (simPhase === 5) {
+                    let oldNationsMap = new Map();
+                    simData.nations.forEach(n => oldNationsMap.set(n.id, n));
+                    simData.lords.forEach(l => oldNationsMap.set(-l.id - 10, { color: l.color })); 
+
+                    let aliveIds = new Set();
+                    for(let i=0; i<width*height; i++) {
+                        if(simData.nationMap[i] !== -1) aliveIds.add(simData.nationMap[i]);
+                    }
+
+                    let newNations = [];
+                    let idTranslation = new Map();
+                    let nextNationId = 0;
+
+                    aliveIds.forEach(oldId => {
+                        let oldInfo = oldNationsMap.get(oldId);
+                        let color = oldInfo ? oldInfo.color : [Math.random()*255, Math.random()*255, Math.random()*255];
+                        
+                        const randState = Math.random();
+                        let state = randState < 0.20 ? 'Golden' : (randState < 0.55 ? 'Decline' : 'Normal');
+                        const angle = Math.random() * Math.PI * 2;
+                        
+                        let newNation = {
+                            id: nextNationId++, color: color, state: state,
+                            focusX: Math.cos(angle), focusY: Math.sin(angle),
+                            fronts: [], size: 0, cx: -1, cy: -1 
+                        };
+                        newNations.push(newNation);
+                        idTranslation.set(oldId, newNation.id);
+                    });
+
+                    simData.nations = newNations;
+                    costMap.fill(Infinity);
+                    
+                    for(let y=0; y<height; y++) {
+                        for(let x=0; x<width; x++) {
+                            let idx = getIndex(x, y);
+                            let oldId = simData.nationMap[idx];
+                            if(oldId !== -1) {
+                                let newId = idTranslation.get(oldId);
+                                simData.nationMap[idx] = newId;
+                                let n = simData.nations[newId];
+                                n.size++;
+                                costMap[idx] = 0; 
+                                
+                                if (n.cx === -1) { n.cx = x; n.cy = y; } 
+
+                                let isFront = false;
+                                const neighbors = [{dx:0,dy:-1},{dx:1,dy:0},{dx:0,dy:1},{dx:-1,dy:0}];
+                                for(let neighbor of neighbors) {
+                                    let nx = x+neighbor.dx, ny = y+neighbor.dy;
+                                    if(nx >=0 && nx < width && ny >= 0 && ny < height) {
+                                        let nIdx = getIndex(nx, ny);
+                                        if(simData.nationMap[nIdx] !== newId && simData.finalElevation[nIdx] >= SEA_LEVEL) {
+                                            isFront = true; break;
+                                        }
+                                    }
+                                }
+                                if(isFront) n.fronts.push({x, y});
+                            }
+                        }
+                    }
+
+                    simData.lords = [];
+                    simData.lordMap.fill(-1);
+                    
+                    setTimeout(() => { simPhase = 1; }, 1500);
+                    simPhase = 6; 
+                }
+
+                if (simPhase !== 4 && simPhase !== 5 && simPhase !== 6) {
+                    ctx.putImageData(imgData, 0, 0);
+
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    simData.nations.forEach(n => {
+                        ctx.beginPath(); ctx.arc(n.cx, n.cy, 5, 0, Math.PI*2);
+                        ctx.fillStyle = '#fff'; ctx.fill();
+                        ctx.lineWidth = 2; ctx.strokeStyle = '#000'; ctx.stroke();
+                    });
+
+                    ctx.fillStyle = "rgba(0,0,0,0.6)";
+                    ctx.fillRect(10, 10, 260, 30);
+                    ctx.fillStyle = "white";
+                    ctx.font = "bold 14px sans-serif";
+                    if (simPhase === 1) ctx.fillText(`[제국력 ${simData.historyYear}년] ⚔️ 정복 및 확장 중...`, 20, 30);
+                    else if (simPhase === 3) ctx.fillText(`[제국력 ${simData.historyYear}년] 🛡️ 호족 영지 분할 중...`, 20, 30);
+                } 
+                else if (simPhase === 6) {
+                    ctx.fillStyle = "rgba(0,0,0,0.8)";
+                    ctx.fillRect(10, 10, 260, 30);
+                    ctx.fillStyle = "#FFD700";
+                    ctx.fillText(`[제국력 ${simData.historyYear}년] 🔄 시대 교체 및 국력 재평가`, 20, 30);
+                }
+
+                requestAnimationFrame(loop); 
+            }
+
+            globalLoop = loop;
+            requestAnimationFrame(globalLoop);
+        }
+
+        function getTerritoryColor(nId, lId) {
+            if (lId !== -1 && simData.lords[lId]) return simData.lords[lId].color;
+            if (nId >= 0 && simData.nations[nId]) return simData.nations[nId].color;
+            if (nId <= -10) { 
+                const rLid = -nId - 10;
+                if (simData.lords[rLid]) return simData.lords[rLid].color;
+            }
+            return [0, 0, 0]; 
+        }
+
+        function renderFinalBorders() {
+            const finalImgData = ctx.createImageData(width, height);
+            const basePixels = simData.baseTerrainPixels; 
+
+            for(let i=0; i<basePixels.length; i++) finalImgData.data[i] = basePixels[i];
+
+            for(let y=1; y<height-1; y++) {
+                for(let x=1; x<width-1; x++) {
+                    const idx = getIndex(x,y);
+                    const nId = simData.nationMap[idx];
+
+                    if(nId !== -1) {
+                        const rightNId = simData.nationMap[getIndex(x+1, y)];
+                        const bottomNId = simData.nationMap[getIndex(x, y+1)];
+                        const lId = simData.lordMap[idx];
+                        const rightLId = simData.lordMap[getIndex(x+1, y)];
+                        const bottomLId = simData.lordMap[getIndex(x, y+1)];
+                        const pIdx = idx * 4;
+
+                        if((nId !== rightNId && rightNId !== -1) || (nId !== bottomNId && bottomNId !== -1)) {
+                            finalImgData.data[pIdx] = 20; finalImgData.data[pIdx+1] = 20; finalImgData.data[pIdx+2] = 20;
+                        } 
+                        else if((lId !== rightLId && rightLId !== -1) || (lId !== bottomLId && bottomLId !== -1)) {
+                            if((x+y)%2 === 0) {
+                                finalImgData.data[pIdx] = 60; finalImgData.data[pIdx+1] = 60; finalImgData.data[pIdx+2] = 60;
+                            } else {
+                                const col = getTerritoryColor(nId, lId);
+                                finalImgData.data[pIdx] = (finalImgData.data[pIdx] * 0.6) + (col[0] * 0.4);
+                                finalImgData.data[pIdx+1] = (finalImgData.data[pIdx+1] * 0.6) + (col[1] * 0.4);
+                                finalImgData.data[pIdx+2] = (finalImgData.data[pIdx+2] * 0.6) + (col[2] * 0.4);
+                            }
+                        }
+                        else {
+                            const col = getTerritoryColor(nId, lId);
+                            finalImgData.data[pIdx] = (finalImgData.data[pIdx] * 0.65) + (col[0] * 0.35);
+                            finalImgData.data[pIdx+1] = (finalImgData.data[pIdx+1] * 0.65) + (col[1] * 0.35);
+                            finalImgData.data[pIdx+2] = (finalImgData.data[pIdx+2] * 0.65) + (col[2] * 0.35);
+                        }
+                    }
+                }
+            }
+            ctx.putImageData(finalImgData, 0, 0);
+
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+
+            simData.lords.forEach(l => {
+                if(l.isCapital) {
+                    ctx.beginPath(); ctx.arc(l.cx, l.cy, 5, 0, Math.PI*2);
+                    ctx.fillStyle = '#fff'; ctx.fill();
+                    ctx.lineWidth = 2; ctx.strokeStyle = '#000'; ctx.stroke();
+
+                    const nState = simData.nations[l.nationId].state;
+                    if(nState === 'Golden') {
+                        ctx.font = "14px sans-serif"; ctx.fillText("👑", l.cx, l.cy - 12);
+                    } else if(nState === 'Decline') {
+                        ctx.font = "14px sans-serif"; ctx.fillText("🔥", l.cx, l.cy - 12);
+                    }
+                } else if(l.isRebel) {
+                    ctx.beginPath(); ctx.arc(l.cx, l.cy, 4, 0, Math.PI*2);
+                    ctx.fillStyle = '#ff4444'; ctx.fill();
+                    ctx.lineWidth = 1.5; ctx.strokeStyle = '#fff'; ctx.stroke();
+                    ctx.font = "12px sans-serif"; ctx.fillText("⚔️", l.cx, l.cy - 10);
+                } else {
+                    ctx.beginPath(); ctx.rect(l.cx - 2, l.cy - 2, 4, 4);
+                    ctx.fillStyle = '#000'; ctx.fill();
+                }
+            });
+            
+            ctx.fillStyle = "rgba(0,0,0,0.8)";
+            ctx.fillRect(10, 10, 260, 30);
+            ctx.fillStyle = "#FF4444";
+            ctx.font = "bold 14px sans-serif";
+            ctx.fillText(`[제국력 ${simData.historyYear}년] ⚔️ 각지에서 반란 및 제국 분열!`, 20, 30);
+        }
+
+        // --- 5. UI 워크플로우 제어 ---
+        function updateUI() {
+            ui.steps.forEach((el, index) => {
+                el.classList.remove('active', 'completed', 'bg-blue-600', 'border-blue-600', 'bg-emerald-500', 'border-emerald-500');
+                el.classList.add('bg-slate-700', 'border-slate-400', 'text-slate-300');
+                
+                if (index < currentStep) {
+                    el.classList.remove('bg-slate-700', 'border-slate-400', 'text-slate-300');
+                    el.classList.add('bg-emerald-500', 'text-white', 'border-emerald-500');
+                } else if (index === currentStep) {
+                    el.classList.remove('bg-slate-700', 'border-slate-400', 'text-slate-300');
+                    el.classList.add('bg-blue-600', 'text-white', 'border-blue-600', 'shadow-lg');
+                }
+            });
+
+            if (currentStep >= 0 && currentStep <= 5) {
+                ui.infoTitle.textContent = stepInfo[currentStep].title;
+                ui.infoDesc.textContent = stepInfo[currentStep].desc;
+            }
+
+            if (currentStep === 5) {
+                ui.btnNext.textContent = isAnimating ? "⏸️ 일시정지" : "▶️ 계속 진행";
+                ui.btnNext.classList.remove('bg-blue-600', 'hover:bg-blue-700', 'bg-emerald-600', 'hover:bg-emerald-700');
+                ui.btnNext.classList.add('bg-amber-500', 'hover:bg-amber-600');
+            } else {
+                ui.btnNext.textContent = "다음 단계 ➔";
+                ui.btnNext.classList.remove('bg-amber-500', 'hover:bg-amber-600', 'bg-emerald-600', 'hover:bg-emerald-700');
+                ui.btnNext.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            }
+        }
+
+        function nextStep() {
+            if (currentStep === 5) {
+                isAnimating = !isAnimating;
+                updateUI();
+                if (isAnimating && globalLoop) requestAnimationFrame(globalLoop);
+                return;
+            }
+            
+            if (isAnimating) return; 
+
+            currentStep++;
+            if (currentStep > 5) {
+                resetSimulation();
+                return;
+            }
+            if (currentStep === 0) reseedNoise(); 
+
+            switch (currentStep) {
+                case 0: stepBaseElevation(); break;
+                case 1: stepPlates(); break;
+                case 2: stepRidges(); break; 
+                case 3: stepRivers(); break;
+                case 4: stepClimate(); break;
+                case 5: stepNationsAndHistoryAsync(); break; 
+            }
+            updateUI();
+        }
+
+        function resetSimulation() {
+            isAnimating = false;
+            currentStep = -1;
+            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, width, height);
+            ui.infoTitle.textContent = "대기 중";
+            ui.infoDesc.textContent = "[다음 단계]를 클릭하여 절차적 생성을 시작하세요.";
+            
+            ui.btnNext.textContent = "생성 시작 ➔";
+            ui.btnNext.classList.remove('bg-amber-500', 'hover:bg-amber-600', 'bg-emerald-600', 'hover:bg-emerald-700');
+            ui.btnNext.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            
+            updateUI();
+        }
+
+        // 스크립트가 완전히 로드된 후 이벤트 바인딩 및 초기화
+        window.addEventListener('DOMContentLoaded', () => {
+            [ui.scale, ui.plates, ui.roughness, ui.rivers, ui.nations].forEach(el => {
+                el.addEventListener('input', () => { if (currentStep > -1 && !isAnimating) resetSimulation(); });
+            });
+            ui.btnNext.addEventListener('click', nextStep);
+            ui.btnReset.addEventListener('click', resetSimulation);
+            
+            resetSimulation();
+        });
+
+    </script>
+</body>
+</html>

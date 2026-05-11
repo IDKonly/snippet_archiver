@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlphaFold 3: 생체 분자 상호작용의 새로운 시대</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body {
+    background-color: #f8fafc;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #0f172a;
+}
+.chart-container {
+    position: relative;
+    width: 100%;
+    max-width: 800px;
+    margin-left: auto;
+    margin-right: auto;
+    height: 350px;
+    max-height: 400px;
+}
+@media (min-width: 768px) {
+    .chart-container {
+        height: 400px;
+    }
+}
+.card {
+    background-color: #ffffff;
+    border-radius: 1rem;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    padding: 1.5rem;
+    transition: transform 0.2s ease-in-out;
+}
+.card:hover {
+    transform: translateY(-5px);
+}
+.gradient-text {
+    background: linear-gradient(90deg, #4361EE 0%, #F72585 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+</style>
+</head>
+<body class="antialiased">
+
+<!-- PALETTE: Vibrant Tech (Deep Space Blue #0B132B, Vibrant Indigo #4361EE, Energetic Cyan #4CC9F0, Accent Magenta #F72585) -->
+<!-- NO MERMAID JS NOR SVG WERE USED ANYWHERE IN THE OUTPUT -->
+<!-- PLAN SUMMARY: Section 1 (Hero/Intro) introduces AF3's scope. Section 2 details the architectural shift (Evoformer to Pairformer/Diffusion). Section 3 showcases benchmark superiority via Bar Chart. Section 4 highlights covalent modifications via Donut Chart. Section 5 explains the calibration of confidence metrics. Section 6 addresses limitations via visually distinct text cards. -->
+<!-- VISUALIZATION CHOICES: 1. Protein-Ligand Success (Compare) -> Bar Chart (Chart.js) to compare AF3 vs RoseTTAFold. 2. Covalent Mods Success (Inform/Compare) -> Donut Chart (Chart.js) to show proportion of successful predictions. NO SVG used, rendering on Canvas. -->
+
+<header class="bg-[#0B132B] text-white py-16 px-6 relative overflow-hidden">
+    <div class="max-w-6xl mx-auto relative z-10 text-center">
+        <h1 class="text-4xl md:text-6xl font-extrabold mb-4">AlphaFold 3</h1>
+        <p class="text-xl md:text-2xl font-light text-[#4CC9F0] mb-8">생체 분자 우주 전체의 결합 구조를 예측하다</p>
+        <p class="max-w-3xl mx-auto text-slate-300 text-lg leading-relaxed">
+            단백질 단독 구조 예측을 넘어 DNA, RNA, 소분자(Ligand), 이온, 그리고 번역 후 변형까지. 
+            단백질 구조 예측과 저분자 화합물 도킹 사이의 장벽을 허문 혁신적인 통합 딥러닝 프레임워크의 성과를 분석합니다.
+        </p>
+    </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-6 py-12">
+
+    <section class="mb-20">
+        <h2 class="text-3xl font-bold mb-6 gradient-text border-b-2 border-slate-200 pb-2">1. 한계를 뛰어넘은 아키텍처 혁신</h2>
+        <p class="text-lg mb-8 text-slate-700 leading-relaxed">
+            AlphaFold 3는 더 넓은 범위의 화학적 구조를 다루고 데이터 처리의 효율성을 극대화하기 위해 기존의 복잡했던 아키텍처를 근본적으로 재설계했습니다. 진화적 정보(MSA)에 대한 의존도를 대폭 낮추고, 3차원 공간에서 원자 좌표를 직접 생성하는 디퓨전(Diffusion) 기술을 도입했습니다.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div class="card border-t-4 border-[#4361EE]">
+                <div class="text-5xl mb-4 text-center">🧱</div>
+                <h3 class="text-xl font-bold mb-3 text-center text-[#0B132B]">Pairformer 모듈</h3>
+                <p class="text-slate-600 text-center">
+                    AF2의 Evoformer를 대체하는 <strong>48개 블록</strong>의 새로운 코어. 진화적 정보가 없는 리간드 등의 특성을 고려하여 MSA 처리를 최소화하고, 분자 간의 '쌍(Pair)' 및 '단일(Single)' 표현만으로 네트워크를 통과시켜 계산 효율을 극대화했습니다.
+                </p>
+            </div>
+            <div class="card border-t-4 border-[#F72585]">
+                <div class="text-5xl mb-4 text-center">⚛️</div>
+                <h3 class="text-xl font-bold mb-3 text-center text-[#0B132B]">디퓨전 모듈 (Diffusion)</h3>
+                <p class="text-slate-600 text-center">
+                    기존의 복잡한 3D 회전 프레임 연산을 버리고, 이미지 생성 AI에 쓰이는 디퓨전 모델을 차용했습니다. 노이즈가 낀 <strong>원자의 원시 좌표(raw coordinates)</strong>를 점진적으로 정제(denoising)하여 다중 척도로 안정적인 입체 구조를 스스로 완성합니다.
+                </p>
+            </div>
+        </div>
+        <div class="bg-indigo-50 rounded-xl p-6 text-indigo-900 border border-indigo-100 shadow-sm">
+            <strong class="block mb-2 text-lg">💡 환각(Hallucination) 억제 기술</strong>
+            디퓨전 모델 특유의 '무질서한 영역에 임의의 가짜 구조를 생성'하는 부작용을 막기 위해, AF2 기반 예측 결과 데이터를 섞어 학습시키는 <strong>교차 증류(Cross-distillation)</strong> 기법을 성공적으로 적용했습니다.
+        </div>
+    </section>
+
+    <section class="mb-20">
+        <h2 class="text-3xl font-bold mb-6 gradient-text border-b-2 border-slate-200 pb-2">2. 단백질-리간드 예측: 벤치마크 압도</h2>
+        <p class="text-lg mb-8 text-slate-700 leading-relaxed">
+            현대 신약 개발의 핵심인 단백질-약물 후보 물질 간의 결합 구조 예측에서 AF3는 눈부신 성과를 입증했습니다. 특히 단백질의 결합 부위(Pocket) 정보를 전혀 주지 않는 맹목 도킹(Blind docking) 환경에서도 기존의 특화 모델들을 통계적으로 완벽히 압도했습니다.
+        </p>
+
+        <div class="card mb-8">
+            <div class="chart-container">
+                <canvas id="dockingChart"></canvas>
+            </div>
+            <p class="text-sm text-center text-slate-500 mt-6 bg-slate-50 p-4 rounded-lg">
+                <strong>차트 설명:</strong> PoseBusters V1 벤치마크(428개 타겟)를 활용한 리간드 결합 예측 성공률(RMSD 2Å 미만) 비교입니다. AlphaFold 3는 76.4%의 압도적인 성공률을 기록하여 경쟁 AI 모델인 RoseTTAFold All-Atom(42.0%)을 크게 앞질렀습니다.
+            </p>
+        </div>
+    </section>
+
+    <section class="mb-20">
+        <h2 class="text-3xl font-bold mb-6 gradient-text border-b-2 border-slate-200 pb-2">3. 공유 결합 변형 및 복합체 예측 정확도</h2>
+        <p class="text-lg mb-8 text-slate-700 leading-relaxed">
+            단백질의 기능을 조절하는 번역 후 변형(당화, 인산화 등) 및 핵산(DNA/RNA), 항체-항원 결합 예측에서도 AF3는 범용성을 증명했습니다. 특화된 툴 없이도 고도의 정밀함을 자랑합니다.
+        </p>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div class="card">
+                <div class="chart-container" style="height: 300px;">
+                    <canvas id="modsChart"></canvas>
+                </div>
+                <p class="text-sm text-center text-slate-500 mt-4">
+                    <strong>차트 설명:</strong> 기능 스위치 역할을 하는 번역 후 변형 구조 예측 성공률. 결합된 리간드는 78.5%, 당화 수식은 72.1%의 놀라운 정확도(RMSD < 2Å)를 보여줍니다.
+                </p>
+            </div>
+            
+            <div class="flex flex-col gap-6">
+                <div class="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-xl border border-blue-100">
+                    <div class="text-3xl mb-2">🧬</div>
+                    <h4 class="text-lg font-bold text-[#0B132B] mb-2">핵산 및 RNA 구조 예측</h4>
+                    <p class="text-slate-700 text-sm">
+                        1,000개 잔기 미만 복합체 평가에서 기존 SOTA 모델인 <strong>RoseTTAFold2NA</strong>를 가볍게 뛰어넘는 iLDDT 수치를 기록했습니다. CASP15 벤치마크에서도 순수 AI 모델 중 1위를 차지했습니다.
+                    </p>
+                </div>
+                <div class="bg-gradient-to-r from-pink-50 to-rose-50 p-6 rounded-xl border border-pink-100">
+                    <div class="text-3xl mb-2">🛡️</div>
+                    <h4 class="text-lg font-bold text-[#0B132B] mb-2">항체-항원 결합 최적화</h4>
+                    <p class="text-slate-700 text-sm">
+                        진화적 정보(MSA)가 극도로 부족하여 난제로 꼽히던 <strong>항체-항원 영역</strong>에서 AF-Multimer v2.3 대비 예측 정확도가 비약적으로 상승했습니다 (DockQ 평가 기준 $P = 6.5 \times 10^{-5}$).
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="mb-20">
+        <div class="card bg-[#0B132B] text-white">
+            <h2 class="text-2xl font-bold mb-4 text-[#4CC9F0]">4. 예측 신뢰도와 캘리브레이션 (Calibration)</h2>
+            <p class="text-slate-300 mb-8 leading-relaxed">
+                연구자가 AI의 결과를 실험에 바로 적용하려면 "모델이 스스로 얼마나 확신하는가"를 아는 것이 필수적입니다. AF3는 학습 중 전체 구조가 생성되지 않는 <strong>디퓨전 모델의 한계</strong>를 극복하기 위해 독창적인 <strong>'미니 롤아웃(Mini-Rollout)'</strong> 기법을 도입했습니다.
+            </p>
+
+            <div class="bg-[#1a2340] rounded-xl p-6 mb-8 border border-slate-700">
+                <h3 class="text-xl font-bold text-[#4CC9F0] mb-6 flex items-center gap-2">
+                    <span>⚙️</span> 신뢰도 학습 메커니즘
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
+                    <!-- Step 1 -->
+                    <div class="bg-[#0B132B] p-5 rounded-lg border border-slate-600 relative z-10">
+                        <div class="w-8 h-8 rounded-full bg-[#4361EE] flex items-center justify-center font-bold mb-3 shadow-lg">1</div>
+                        <h4 class="font-bold text-[#F72585] mb-2">미니 롤아웃 (Mini-Rollout)</h4>
+                        <p class="text-sm text-slate-300">디퓨전 모델은 학습 중 최종 구조를 한 번에 만들지 않습니다. 대신 보폭을 크게 한 <strong>빠른 시뮬레이션(약 20회 반복)</strong>을 돌려 '가완성된 예측 구조'를 신속하게 생성합니다.</p>
+                    </div>
+                    
+                    <!-- Step 2 -->
+                    <div class="bg-[#0B132B] p-5 rounded-lg border border-slate-600 relative z-10">
+                        <div class="w-8 h-8 rounded-full bg-[#4361EE] flex items-center justify-center font-bold mb-3 shadow-lg">2</div>
+                        <h4 class="font-bold text-[#F72585] mb-2">대칭성 교정 (Permutation)</h4>
+                        <p class="text-sm text-slate-300">생성된 가완성 구조와 실제 정답(Ground Truth)을 비교하여, 동일한 체인(Homomer)이나 리간드가 여러 개일 경우 최적으로 매칭되도록 <strong>배열을 교정</strong>합니다.</p>
+                    </div>
+
+                    <!-- Step 3 -->
+                    <div class="bg-[#0B132B] p-5 rounded-lg border border-slate-600 relative z-10">
+                        <div class="w-8 h-8 rounded-full bg-[#4361EE] flex items-center justify-center font-bold mb-3 shadow-lg">3</div>
+                        <h4 class="font-bold text-[#F72585] mb-2">신뢰도 모듈 (Confidence Head)</h4>
+                        <p class="text-sm text-slate-300">쌍(Pairwise) 표현과 구조 오차를 입력받아 별도의 신경망 모듈이 <strong>오차를 정밀하게 회귀(Regress) 학습</strong>하여 최종 신뢰도 지표를 출력합니다.</p>
+                    </div>
+                </div>
+            </div>
+
+            <h3 class="text-lg font-bold text-slate-200 mb-4 border-b border-slate-700 pb-2">도출된 핵심 신뢰도 지표</h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white/10 p-5 rounded-lg backdrop-blur-md">
+                    <div class="text-[#F72585] font-black text-xl mb-1">ipTM</div>
+                    <div class="text-sm text-slate-200">인터페이스 TM-score. 두 분자가 만나는 결합면이 얼마나 정확히 맞닿았는지 평가합니다.</div>
+                </div>
+                <div class="bg-white/10 p-5 rounded-lg backdrop-blur-md">
+                    <div class="text-[#F72585] font-black text-xl mb-1">pLDDT</div>
+                    <div class="text-sm text-slate-200">개별 원자 및 아미노산 잔기의 국소적 3D 구조 정확도를 나타내는 핵심 지표입니다.</div>
+                </div>
+                <div class="bg-white/10 p-5 rounded-lg backdrop-blur-md">
+                    <div class="text-[#F72585] font-black text-xl mb-1">PAE</div>
+                    <div class="text-sm text-slate-200">단백질 도메인 간의 상대적인 위치 오차를 예측하여 구조의 유연성과 강성을 확인합니다.</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="mb-10">
+        <h2 class="text-3xl font-bold mb-6 gradient-text border-b-2 border-slate-200 pb-2">5. 모델의 한계 및 극복 과제</h2>
+        <p class="text-lg mb-8 text-slate-700 leading-relaxed">
+            분자 생물학 역사에 획을 긋는 모델이지만, 딥러닝 본연의 특성 및 구조적 복잡성으로 인해 여전히 주의해야 할 기술적 한계가 존재합니다.
+        </p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="card border-l-4 border-amber-500">
+                <h4 class="font-bold text-lg mb-2 text-slate-800">⚠️ 입체화학적 오류 (Stereochemistry)</h4>
+                <p class="text-slate-600 text-sm mb-3">
+                    입력 시 카이랄성(Chirality) 정보를 제공함에도 불구, PoseBusters 평가에서 모델이 <strong>약 4.4%</strong> 확률로 이를 무시하고 역방향 거울상 이성질체를 생성하는 오류가 보고되었습니다. 또한 2,000 잔기 이상의 초대형 복합체에서는 원자 간 겹침(Clashing) 현상이 관찰됩니다.
+                </p>
+            </div>
+            <div class="card border-l-4 border-amber-500">
+                <h4 class="font-bold text-lg mb-2 text-slate-800">⚠️ 동역학적 한계 (Dynamics)</h4>
+                <p class="text-slate-600 text-sm mb-3">
+                    PDB의 '정적 스냅샷'만을 학습했기 때문에 용액 내의 '동적 앙상블'을 표현하지 못합니다. 예를 들어 E3 유비퀴틴 리가아제는 리간드 결합 여부에 따라 열림/닫힘 상태가 변해야 하나, AF3는 가장 흔한 <strong>'닫힌 상태(closed)'</strong>만을 편향적으로 출력합니다.
+                </p>
+            </div>
+            <div class="card border-l-4 border-amber-500 md:col-span-2">
+                <h4 class="font-bold text-lg mb-2 text-slate-800">⚠️ 막대한 계산 비용 (항체 예측)</h4>
+                <p class="text-slate-600 text-sm">
+                    항체-항원 복합체처럼 진화적 정보가 적고 변이가 극심한 표적은 단일 추론으로 최적해를 얻기 어렵습니다. 가장 높은 신뢰도의 구조를 찾기 위해 노이즈를 변경하며 최대 <strong>1,000개의 시드(seeds)</strong>를 샘플링해야 하므로 엄청난 컴퓨팅 자원이 요구됩니다.
+                </p>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<footer class="bg-slate-900 text-slate-400 py-10 text-center">
+    <div class="max-w-4xl mx-auto px-6">
+        <h3 class="text-white text-xl font-bold mb-4">합리적 신약 설계(Rational Drug Design)의 가속화</h3>
+        <p class="text-sm leading-relaxed mb-6">
+            AlphaFold 3는 단일 딥러닝 프레임워크 안에서 생명체 내 거의 모든 상호작용을 한 번에 시뮬레이션 할 수 있게 만들었습니다. MSA 의존도를 극복하고 단백질-약물 도킹 사이의 장벽을 허문 이 성과는 향후 표적 항암제, 항체 치료제 및 백신 설계의 속도와 정확성을 폭발적으로 끌어올릴 것입니다.
+        </p>
+        <p class="text-xs text-slate-500">© 2026 Analysis Visualization Based on AlphaFold 3 Research Paper.</p>
+    </div>
+</footer>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    Chart.defaults.font.family = "'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+    Chart.defaults.color = '#64748b';
+
+    const tooltipConfig = {
+        callbacks: {
+            title: function(tooltipItems) {
+                const item = tooltipItems[0];
+                let label = item.chart.data.labels[item.dataIndex];
+                if (Array.isArray(label)) {
+                    return label.join(' ');
+                } else {
+                    return label;
+                }
+            }
+        }
+    };
+
+    const ctxDocking = document.getElementById('dockingChart').getContext('2d');
+    new Chart(ctxDocking, {
+        type: 'bar',
+        data: {
+            labels: ['AlphaFold 3', ['RoseTTAFold', 'All-Atom']], 
+            datasets: [{
+                label: '예측 성공률 (%) - RMSD < 2Å',
+                data: [76.4, 42.0],
+                backgroundColor: ['#4361EE', '#F72585'],
+                borderRadius: 8,
+                borderSkipped: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: tooltipConfig
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    },
+                    grid: {
+                        color: '#f1f5f9'
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        font: {
+                            weight: 'bold',
+                            size: 14
+                        },
+                        color: '#0f172a'
+                    }
+                }
+            }
+        }
+    });
+
+    const ctxMods = document.getElementById('modsChart').getContext('2d');
+    new Chart(ctxMods, {
+        type: 'bar',
+        data: {
+            labels: [['결합된 리간드', '(Bonded Ligands)'], ['단일 잔기 당화', '(Glycosylation)']],
+            datasets: [{
+                label: '예측 성공률 (%)',
+                data: [78.5, 72.1],
+                backgroundColor: ['#4CC9F0', '#4361EE'],
+                borderRadius: 8,
+                borderSkipped: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: tooltipConfig
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    },
+                    grid: {
+                        color: '#f1f5f9'
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    },
+                    ticks: {
+                        font: {
+                            weight: 'bold',
+                            size: 13
+                        },
+                        color: '#0f172a'
+                    }
+                }
+            }
+        }
+    });
+});
+</script>
+
+</body>
+</html>

@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bio-Lab Workspace v2.9.5 (Prompt Enhanced)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts/Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+    <style>
+        /* Custom Utilities */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        @keyframes fade-in-up {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in-up { animation: fade-in-up 0.3s ease-out; }
+        .drag-active { border-color: #6366f1 !important; background-color: #e0e7ff !important; color: #4338ca !important; }
+        
+        /* Toggle Switch */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #4f46e5;
+        }
+        .toggle-checkbox:checked + .toggle-label {
+            background-color: #4f46e5;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen overflow-hidden flex flex-col font-sans">
+
+    <div id="app" class="h-full flex flex-col relative">
+        <!-- 상단 헤더 -->
+        <header class="bg-white border-b border-slate-200 px-6 py-3 flex justify-between items-center shadow-sm z-20 h-16 shrink-0">
+            <div class="flex items-center gap-3">
+                <span class="material-icons-outlined text-indigo-600 text-3xl">science</span>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-800 tracking-tight">Bio-Lab Workspace</h1>
+                    <p class="text-xs text-slate-400 font-medium">Single-File Modular Platform v2.9.5</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <!-- Template Button -->
+                <button @click="showPromptModal = true" class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition relative group" title="Get Module Template">
+                    <span class="material-icons-outlined">code</span>
+                    <span class="absolute top-full mt-1 right-0 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition whitespace-nowrap pointer-events-none">Get Template</span>
+                </button>
+                
+                <div class="h-6 w-px bg-slate-200 mx-1"></div>
+                
+                <!-- Snapshot Controls (LocalStorage) -->
+                <div class="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200">
+                    <button @click="saveSnapshot" class="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-white hover:shadow-sm rounded-md transition" title="Save current state to browser storage">
+                        <span class="material-icons-outlined text-sm">save</span>
+                        스냅샷 저장
+                    </button>
+                    <div class="w-px h-4 bg-slate-300 mx-1"></div>
+                    <button @click="openSnapshotList" class="flex items-center gap-2 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-white hover:shadow-sm rounded-md transition" title="Load saved snapshot">
+                        <span class="material-icons-outlined text-sm">restore</span>
+                        불러오기
+                    </button>
+                </div>
+
+                <!-- Export File -->
+                <button @click="exportData" class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition" title="Export JSON File">
+                    <span class="material-icons-outlined">file_download</span>
+                </button>
+                <label class="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition cursor-pointer" title="Import JSON File">
+                    <span class="material-icons-outlined">file_upload</span>
+                    <input type="file" @change="importData" class="hidden" accept=".json">
+                </label>
+            </div>
+        </header>
+
+        <!-- 메인 영역 -->
+        <main class="flex-1 flex overflow-hidden">
+            <!-- 앱 사이드바 -->
+            <aside class="w-64 bg-white border-r border-slate-200 flex flex-col z-10 shadow-lg shrink-0">
+                <!-- 모듈 추가 영역 (Drag & Drop) -->
+                <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                    <div 
+                        class="relative w-full border-2 border-dashed border-slate-300 rounded-lg transition-colors group bg-white"
+                        :class="{ 'drag-active': isDragging }"
+                        @dragover.prevent="isDragging = true"
+                        @dragleave.prevent="isDragging = false"
+                        @drop.prevent="handleDrop"
+                    >
+                        <div class="flex flex-col items-center justify-center py-4 text-slate-500">
+                            <span class="material-icons-outlined group-hover:scale-110 transition-transform mb-1">cloud_upload</span>
+                            <span class="text-xs font-medium text-center px-2">Drag HTML here<br>or Click</span>
+                        </div>
+                        <input type="file" @change="loadModuleFromFile" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" accept=".html">
+                        
+                        <!-- Paste Button -->
+                        <button 
+                            @click.stop.prevent="showPasteModal = true"
+                            class="absolute top-1 right-1 p-1 bg-white border border-slate-200 rounded hover:bg-indigo-50 hover:text-indigo-600 z-10 shadow-sm"
+                            title="Paste Code directly"
+                        >
+                            <span class="material-icons-outlined text-sm">content_paste</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 모듈 목록 -->
+                <div class="px-5 pt-4 pb-2">
+                    <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider">Installed Apps</h2>
+                </div>
+                <nav class="flex-1 overflow-y-auto py-2 px-3 space-y-1 custom-scrollbar">
+                    <div 
+                        v-for="module in modules" 
+                        :key="module.id"
+                        class="relative group mb-1"
+                    >
+                        <div 
+                            class="w-full flex items-center gap-3 rounded-lg transition-all duration-200 pr-2 group-hover:bg-slate-50"
+                            :class="activeModuleId === module.id ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200' : 'text-slate-600'"
+                        >
+                            <button 
+                                @click="activeModuleId = module.id"
+                                class="flex-1 flex items-center gap-3 px-4 py-3 text-left overflow-hidden"
+                            >
+                                <span class="material-icons-outlined shrink-0">{{ module.icon || 'extension' }}</span>
+                                <span class="font-medium truncate">{{ module.name }}</span>
+                            </button>
+
+                            <!-- Rename Button -->
+                            <button 
+                                @click.stop="renameModule(module)"
+                                class="p-1 text-slate-300 hover:text-indigo-600 hover:bg-indigo-100 rounded opacity-0 group-hover:opacity-100 transition"
+                                title="Rename App"
+                            >
+                                <span class="material-icons-outlined text-sm">edit</span>
+                            </button>
+
+                            <!-- Delete Button (External Only) -->
+                            <button 
+                                v-if="module.isExternal"
+                                @click.stop="removeModule(module)"
+                                class="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition"
+                                title="Remove Module"
+                            >
+                                <span class="material-icons-outlined text-sm">delete</span>
+                            </button>
+                        </div>
+                    </div>
+                </nav>
+            </aside>
+
+            <!-- 컨텐츠 영역 -->
+            <section class="flex-1 overflow-hidden bg-slate-100 relative">
+                <component :is="activeComponent" :data="currentModuleData" @update="updateModuleData"></component>
+            </section>
+        </main>
+
+        <!-- [모달] Snapshot List -->
+        <div v-if="showSnapshotModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fade-in-up">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh]">
+                <div class="px-6 py-4 border-b flex justify-between items-center bg-slate-50">
+                    <h3 class="font-bold text-lg text-slate-800">Saved Snapshots</h3>
+                    <button @click="showSnapshotModal = false" class="text-slate-400 hover:text-red-500"><span class="material-icons-outlined">close</span></button>
+                </div>
+                <div class="p-2 flex-1 overflow-y-auto custom-scrollbar">
+                    <div v-if="snapshots.length === 0" class="text-center py-8 text-slate-400">
+                        <span class="material-icons-outlined text-4xl mb-2">save_off</span>
+                        <p>No snapshots saved.</p>
+                    </div>
+                    <div v-for="snap in snapshots" :key="snap.name" class="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg group border-b border-slate-100 last:border-0">
+                        <div class="flex flex-col">
+                            <span class="font-bold text-slate-700">{{ snap.name }}</span>
+                            <span class="text-xs text-slate-400">{{ snap.date }}</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button @click="loadSnapshot(snap.name)" class="px-3 py-1 bg-indigo-600 text-white text-xs rounded hover:bg-indigo-700 transition">Load</button>
+                            <button @click="deleteSnapshot(snap.name)" class="p-1 text-slate-300 hover:text-red-500 transition"><span class="material-icons-outlined text-base">delete</span></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- [모달] Paste Code -->
+        <div v-if="showPasteModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fade-in-up">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh]">
+                <div class="px-6 py-4 border-b flex justify-between items-center bg-slate-50">
+                    <h3 class="font-bold text-lg text-slate-800">Paste Module Code</h3>
+                    <button @click="showPasteModal = false" class="text-slate-400 hover:text-red-500"><span class="material-icons-outlined">close</span></button>
+                </div>
+                <div class="p-6 flex-1 flex flex-col">
+                    <textarea 
+                        v-model="pasteContent" 
+                        class="w-full flex-1 p-4 bg-slate-50 border border-slate-200 rounded-lg font-mono text-xs resize-none outline-none focus:ring-2 focus:ring-indigo-500 custom-scrollbar" 
+                        placeholder="Paste your HTML module code here... (<!DOCTYPE html>...)"
+                    ></textarea>
+                </div>
+                <div class="px-6 py-4 border-t bg-slate-50 flex justify-end gap-2">
+                    <button @click="showPasteModal = false" class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-200 rounded-lg transition">Cancel</button>
+                    <button @click="handlePasteLoad" class="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm font-semibold">Load Module</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- [모달] 모듈 변환 프롬프트 -->
+        <div v-if="showPromptModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 animate-fade-in-up">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden border border-slate-200">
+                <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <div class="flex items-center gap-2">
+                        <span class="material-icons-outlined text-indigo-600">auto_fix_high</span>
+                        <h3 class="font-bold text-lg text-slate-800">Module Converter Prompt</h3>
+                    </div>
+                    <button @click="showPromptModal = false" class="text-slate-400 hover:text-red-500 transition">
+                        <span class="material-icons-outlined">close</span>
+                    </button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <div class="bg-indigo-50 text-indigo-900 text-sm p-4 rounded-lg">
+                        <h4 class="font-bold mb-2">Workflow Guide:</h4>
+                        <ol class="list-decimal list-inside space-y-1 text-indigo-800">
+                            <li><strong>Idea:</strong> Gemini에게 원하는 기능(예: 타이머, 계산기)의 HTML/JS 코드를 요청하세요.</li>
+                            <li><strong>Verify:</strong> 코드가 정상 작동하는지 확인하세요.</li>
+                            <li><strong>Convert:</strong> 아래 프롬프트를 복사하여 "이 코드를 Bio-Lab 모듈로 변환해줘"라고 요청하세요.</li>
+                            <li><strong>Integrate:</strong> 변환된 HTML 코드를 앱에 드래그하거나 붙여넣으세요.</li>
+                        </ol>
+                    </div>
+                    <div class="relative group">
+                        <textarea readonly class="w-full h-64 p-4 bg-slate-800 text-slate-200 text-sm font-mono rounded-lg resize-none focus:outline-none custom-scrollbar leading-relaxed" v-model="converterPrompt"></textarea>
+                        <button @click="copyPrompt" class="absolute top-3 right-3 bg-white/10 hover:bg-white/20 text-white p-1.5 rounded transition-colors border border-white/10">
+                            <span class="material-icons-outlined text-sm">content_copy</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- [모듈 1] 성장 분석기 (Growth Analyzer) v2.9.5 -->
+    <!-- ========================================== -->
+    <script type="text/x-template" id="growth-analyzer-template">
+        <div class="flex h-full w-full animate-fade-in-up flex-col">
+            <!-- Top Bar: Mode Switcher -->
+            <div class="bg-white border-b border-slate-200 px-6 py-2 flex items-center justify-between shrink-0 h-12">
+                <div class="flex bg-slate-100 rounded-lg p-1">
+                    <button 
+                        @click="mode = 'single'" 
+                        class="px-4 py-1 rounded-md text-xs font-bold transition-all"
+                        :class="mode === 'single' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                    >
+                        Single Analysis
+                    </button>
+                    <button 
+                        @click="mode = 'compare'" 
+                        class="px-4 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1"
+                        :class="mode === 'compare' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'"
+                    >
+                        Compare Mode <span class="bg-indigo-100 text-indigo-600 px-1 rounded-full text-[10px] ml-1">{{ sessions.length }}</span>
+                    </button>
+                </div>
+                <!-- Lag Time Toggle (Global Option) -->
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold text-slate-500 uppercase">Show Lag Time</span>
+                    <div class="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                        <input type="checkbox" name="toggle" id="toggleLag" class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-slate-300 transition-all duration-200" v-model="showLagTime"/>
+                        <label for="toggleLag" class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-300 cursor-pointer transition-colors duration-200"></label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 flex overflow-hidden">
+                <!-- 1. History Panel (Left) -->
+                <div class="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0">
+                    <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-3">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-bold text-slate-700 text-sm">
+                                {{ isGrouped ? 'Strains (Pooled)' : 'Experiment History' }}
+                            </h3>
+                            <button v-if="mode === 'single' && !isGrouped" @click="createNewSession" class="bg-indigo-600 hover:bg-indigo-700 text-white p-1.5 rounded-md shadow-sm transition" title="New Experiment">
+                                <span class="material-icons-outlined text-sm">add</span>
+                            </button>
+                        </div>
+                        
+                        <!-- Grouping Toggle -->
+                        <button 
+                            @click="toggleGrouping" 
+                            class="w-full py-1.5 text-xs font-semibold border rounded flex items-center justify-center gap-2 transition"
+                            :class="isGrouped ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'"
+                        >
+                            <span class="material-icons-outlined text-sm">{{ isGrouped ? 'folder_open' : 'folder' }}</span>
+                            {{ isGrouped ? 'Show All Sessions' : 'Group by Name' }}
+                        </button>
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto custom-scrollbar">
+                        <div v-if="displayList.length === 0" class="p-4 text-center text-xs text-slate-400">
+                            No experiments yet.
+                        </div>
+                        
+                        <div 
+                            v-for="item in displayList" 
+                            :key="item.id"
+                            @click="handleListClick(item)"
+                            class="p-3 border-b border-slate-100 cursor-pointer hover:bg-slate-50 transition relative group flex items-center gap-3"
+                            :class="isItemActive(item.id) ? 'bg-indigo-50 border-l-4 border-l-indigo-500' : 'border-l-4 border-l-transparent'"
+                        >
+                            <!-- Checkbox for Compare Mode -->
+                            <div v-if="mode === 'compare' && !isGrouped" class="shrink-0">
+                                <input 
+                                    type="checkbox" 
+                                    :checked="compareIds.includes(item.id)" 
+                                    class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 border-gray-300"
+                                    @click.stop="toggleCompare(item.id)"
+                                >
+                            </div>
+
+                            <div class="flex-1 min-w-0">
+                                <div class="font-semibold text-sm text-slate-800 truncate flex items-center gap-1">
+                                    <span v-if="isGrouped" class="material-icons-outlined text-xs text-slate-400">folder</span>
+                                    {{ item.strainName || 'Untitled' }}
+                                    <span v-if="isGrouped" class="text-[10px] bg-slate-200 text-slate-600 px-1.5 rounded-full ml-auto">{{ item.count }}</span>
+                                </div>
+                                <div class="text-xs text-slate-500 mt-1 flex justify-between">
+                                    <span>{{ formatDate(item.createdAt || item.updatedAt) }}</span>
+                                </div>
+                            </div>
+                            
+                            <button 
+                                v-if="mode === 'single' && !isGrouped"
+                                @click.stop="deleteSession(item.id)"
+                                class="absolute right-2 top-3 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition"
+                                title="Delete"
+                            >
+                                <span class="material-icons-outlined text-sm">delete</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Main Workspace (Center & Right) -->
+                <div class="flex-1 flex flex-col overflow-hidden bg-slate-50">
+                    
+                    <!-- [MODE: SINGLE / GROUP Analysis] -->
+                    <div v-if="mode === 'single' && activeSession" class="flex flex-col h-full">
+                        <!-- Header Info -->
+                        <div class="bg-white border-b border-slate-200 px-6 py-4 flex items-center gap-4 shrink-0">
+                            <div class="flex-1">
+                                <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Strain Name / ID</label>
+                                <div class="relative">
+                                    <input 
+                                        type="text" 
+                                        v-model="activeSession.strainName" 
+                                        @input="emitUpdate"
+                                        :readonly="isGrouped"
+                                        class="text-xl font-bold text-slate-800 w-full outline-none placeholder-slate-300 border-b border-transparent transition"
+                                        :class="isGrouped ? 'cursor-default' : 'focus:border-indigo-300'"
+                                        placeholder="Ex. E. coli K-12 (Rep 1)"
+                                    >
+                                    <span v-if="isGrouped" class="absolute right-0 top-1/2 -translate-y-1/2 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold">Pooled Data</span>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-xs text-slate-400 font-mono">ID: {{ isGrouped ? 'POOLED' : activeSession.id }}</div>
+                                <div class="text-xs text-slate-500">{{ formatDate(activeSession.createdAt || activeSession.updatedAt) }}</div>
+                            </div>
+                        </div>
+
+                        <div class="flex-1 flex overflow-hidden p-6 gap-6">
+                            <!-- Middle: Input & Memo -->
+                            <div class="w-1/3 flex flex-col gap-6 overflow-y-auto custom-scrollbar pr-2">
+                                <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col shrink-0">
+                                    <div class="bg-slate-50 px-4 py-2 border-b border-slate-100 flex items-center gap-2">
+                                        <span class="material-icons-outlined text-sm text-slate-500">sticky_note_2</span>
+                                        <h3 class="font-semibold text-slate-700 text-sm">Notes</h3>
+                                    </div>
+                                    <textarea 
+                                        v-model="activeSession.memo" 
+                                        @input="emitUpdate" 
+                                        :readonly="isGrouped"
+                                        class="w-full h-24 p-3 text-sm text-slate-600 resize-none outline-none focus:bg-slate-50 transition" 
+                                        :placeholder="isGrouped ? 'Notes are read-only in Pooled Mode' : 'Memo...'"
+                                    ></textarea>
+                                </div>
+
+                                <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col flex-1 min-h-[300px]">
+                                    <div class="bg-slate-50 px-4 py-2 border-b border-slate-100 flex justify-between items-center">
+                                        <h3 class="font-semibold text-slate-700 text-sm">Measurements {{ isGrouped ? '(Read Only)' : '' }}</h3>
+                                        <button v-if="!isGrouped" @click="addDataPoint" class="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded hover:bg-indigo-700 transition shadow-sm font-bold flex items-center gap-1">
+                                            <span class="material-icons-outlined text-[10px]">control_point_duplicate</span> Add Point
+                                        </button>
+                                    </div>
+                                    <div class="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                                        <div class="grid grid-cols-6 gap-2 px-2 text-[10px] font-bold text-slate-400 uppercase text-center mb-1">
+                                            <span class="col-span-2">Time (h)</span>
+                                            <span class="col-span-3">OD600</span>
+                                            <span class="col-span-1">Del</span>
+                                        </div>
+                                        <div v-for="(point, index) in activeSession.points" :key="index" class="grid grid-cols-6 gap-2 items-center">
+                                            <input type="number" v-model.number="point.time" step="0.5" @input="emitUpdate" :readonly="isGrouped" class="col-span-2 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-sm text-center focus:ring-1 focus:ring-indigo-500 outline-none transition">
+                                            <input type="number" v-model.number="point.od" step="0.01" @input="emitUpdate" :readonly="isGrouped" class="col-span-3 bg-slate-50 border border-slate-200 rounded px-2 py-1.5 text-sm text-center focus:ring-1 focus:ring-indigo-500 outline-none transition">
+                                            <button v-if="!isGrouped" @click="removeDataPoint(index)" class="col-span-1 text-slate-300 hover:text-red-500 flex justify-center"><span class="material-icons-outlined text-base">close</span></button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right: Analysis & Chart -->
+                            <div class="flex-1 flex flex-col gap-6 overflow-hidden">
+                                <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+                                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><div class="text-xs font-bold text-slate-400 uppercase">Doubling Time</div><div class="text-2xl font-bold text-indigo-600">{{ results.dt ? results.dt.toFixed(2) : '-' }} <span class="text-xs text-slate-400 font-normal">hr</span></div></div>
+                                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><div class="text-xs font-bold text-slate-400 uppercase">Growth Rate (μ)</div><div class="text-2xl font-bold text-emerald-600">{{ results.mu ? results.mu.toFixed(4) : '-' }} <span class="text-xs text-slate-400 font-normal">/hr</span></div></div>
+                                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm"><div class="text-xs font-bold text-slate-400 uppercase">R-Squared</div><div class="text-2xl font-bold text-slate-700">{{ results.r2 ? results.r2.toFixed(3) : '-' }}</div></div>
+                                    <!-- Lag Time Card (Toggled) -->
+                                    <div v-if="showLagTime" class="bg-orange-50 p-4 rounded-xl border border-orange-200 shadow-sm animate-fade-in-up">
+                                        <div class="text-xs font-bold text-orange-400 uppercase">Lag Time</div>
+                                        <div class="text-2xl font-bold text-orange-600">{{ results.lag ? results.lag.toFixed(2) : '0' }} <span class="text-xs text-orange-400 font-normal">hr</span></div>
+                                    </div>
+                                </div>
+                                <div class="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm p-4 relative min-h-[300px]">
+                                    <canvas id="growthChart"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- [MODE: COMPARE] -->
+                    <div v-else-if="mode === 'compare'" class="flex flex-col h-full p-6 gap-4">
+                        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm shrink-0 flex items-center justify-between">
+                            <div>
+                                <h3 class="font-bold text-lg text-slate-800">Multi-Session Comparison</h3>
+                                <p class="text-sm text-slate-500">Select sessions from the sidebar to overlay their growth curves & trendlines.</p>
+                            </div>
+                            <div class="flex gap-2 text-xs">
+                                <span class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-md font-bold">{{ compareIds.length }} Selected</span>
+                            </div>
+                        </div>
+                        <div class="flex-1 bg-white rounded-xl border border-slate-200 shadow-sm p-4 relative">
+                            <canvas id="compareChart"></canvas>
+                            <div v-if="compareIds.length === 0" class="absolute inset-0 flex items-center justify-center bg-white/50 backdrop-blur-sm z-10">
+                                <p class="text-slate-400 font-medium">Select at least one session from the sidebar</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Empty State -->
+                    <div v-else class="flex-1 flex flex-col items-center justify-center text-slate-300">
+                        <span class="material-icons-outlined text-6xl mb-4 text-slate-200">biotech</span>
+                        <p class="text-lg font-medium text-slate-400">Select an experiment to start</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </script>
+
+    <!-- [Component 2: Prompt Notebook] (No changes, reused) -->
+    <script type="text/x-template" id="prompt-notebook-template">
+        <div class="flex h-full w-full bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden animate-fade-in-up m-6 w-[calc(100%-3rem)] h-[calc(100%-3rem)]">
+            <div class="w-72 border-r border-slate-200 flex flex-col bg-slate-50">
+                <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-white">
+                    <h2 class="font-bold text-slate-700 flex items-center gap-2"><span class="material-icons-outlined text-indigo-600">library_books</span>Notebook</h2>
+                    <button @click="addNote" class="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-sm"><span class="material-icons-outlined text-sm">add</span></button>
+                </div>
+                <div class="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                    <button v-for="note in sortedNotes" :key="note.id" @click="selectNote(note.id)" class="w-full text-left p-3 rounded-lg border transition-all duration-200 group relative" :class="localData.activeId === note.id ? 'bg-white border-indigo-500 shadow-md z-10' : 'bg-transparent border-transparent hover:bg-white hover:border-slate-300'">
+                        <div class="font-semibold text-sm text-slate-800 truncate pr-6">{{ note.title || 'Untitled Note' }}</div>
+                        <div class="text-xs text-slate-400 mt-1 flex justify-between"><span>{{ formatDate(note.updatedAt) }}</span></div>
+                        <div @click.stop="deleteNote(note.id)" class="absolute right-2 top-3 opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-opacity"><span class="material-icons-outlined text-sm">delete</span></div>
+                    </button>
+                </div>
+            </div>
+            <div class="flex-1 flex flex-col bg-white h-full relative">
+                <div v-if="activeNote" class="flex flex-col h-full">
+                    <div class="px-8 py-5 border-b border-slate-100"><input type="text" v-model="activeNote.title" @input="touchNote" placeholder="Note Title" class="text-3xl font-bold text-slate-800 w-full outline-none bg-transparent placeholder-slate-300"></div>
+                    <textarea v-model="activeNote.content" @input="touchNote" placeholder="Start typing..." class="flex-1 w-full p-8 text-slate-600 outline-none resize-none leading-relaxed custom-scrollbar text-lg font-light"></textarea>
+                    <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 text-xs text-slate-400 flex justify-end">Last saved: {{ formatDate(activeNote.updatedAt) }}</div>
+                </div>
+                <div v-else class="flex-1 flex flex-col items-center justify-center text-slate-300 bg-slate-50/50"><span class="material-icons-outlined text-6xl mb-4 text-slate-200">edit_note</span><p class="text-lg">Select a note</p></div>
+            </div>
+        </div>
+    </script>
+
+    <!-- Main Logic -->
+    <script>
+        const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
+
+        // --- Growth Analysis Logic (Global) ---
+        function calculateGrowthParams(points) {
+            // 1. Prepare Data
+            const allData = points
+                .filter(p => p.time !== "" && p.od !== "" && parseFloat(p.od) > 0)
+                .map(p => ({ t: parseFloat(p.time), od: parseFloat(p.od), ln_od: Math.log(parseFloat(p.od)) }))
+                .sort((a, b) => a.t - b.t);
+
+            if (allData.length < 2) return { mu: null, dt: null, r2: null, lag: null, validData: [], minOD: null };
+
+            // 2. Select Data for Regression
+            let regressionData = allData;
+            if (allData.length >= 4) {
+                regressionData = allData.slice(1);
+            }
+
+            // 3. Linear Regression
+            const n = regressionData.length;
+            let sumT = 0, sumLnOD = 0, sumTLnOD = 0, sumT2 = 0;
+            
+            regressionData.forEach(p => {
+                sumT += p.t;
+                sumLnOD += p.ln_od;
+                sumTLnOD += p.t * p.ln_od;
+                sumT2 += p.t * p.t;
+            });
+
+            const denominator = (n * sumT2 - sumT * sumT);
+            if (denominator === 0) return { mu: null, dt: null, r2: null, lag: null, validData: allData }; 
+
+            const mu = (n * sumTLnOD - sumT * sumLnOD) / denominator;
+            const intercept = (sumLnOD - mu * sumT) / n;
+
+            // 4. R-Squared
+            let sumLnOD2 = 0;
+            regressionData.forEach(p => { sumLnOD2 += p.ln_od * p.ln_od; });
+            const r2_numerator = Math.pow((n * sumTLnOD - sumT * sumLnOD), 2);
+            const r2_denominator = (n * sumT2 - sumT * sumT) * (n * sumLnOD2 - sumLnOD * sumLnOD);
+            const r2 = r2_denominator === 0 ? 0 : r2_numerator / r2_denominator;
+
+            // 5. Lag Time & DT
+            const minOD = Math.min(...allData.map(p => p.od)); 
+            
+            let lag = null;
+            if (mu > 0) {
+                lag = (Math.log(minOD) - intercept) / mu;
+                if (lag < 0) lag = 0;
+            }
+
+            if (mu <= 0) return { mu, dt: null, r2, lag: null, validData: allData, intercept, minOD };
+            
+            const dt = Math.log(2) / mu;
+
+            return { mu, dt, r2, lag, validData: allData, intercept, minOD };
+        }
+
+        // --- Growth Analyzer Component ---
+        const GrowthAnalyzer = {
+            template: '#growth-analyzer-template',
+            props: ['data'],
+            emits: ['update'],
+            setup(props, { emit }) {
+                // [FIX] formatDate defined at the top
+                const formatDate = (ts) => ts ? new Date(ts).toLocaleString('ko-KR', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+
+                const initializeData = () => {
+                    const raw = props.data || {};
+                    if (raw.sessions) {
+                        raw.sessions.forEach(s => {
+                            if (!s.createdAt) s.createdAt = s.updatedAt || Date.now();
+                        });
+                        return raw;
+                    }
+                    const now = Date.now();
+                    const initialSession = { id: now, strainName: raw.strainName || 'My First Strain', memo: '', points: raw.points || [{time: 0, od: 0.05}], createdAt: now, updatedAt: now };
+                    return { sessions: [initialSession], activeId: initialSession.id };
+                };
+                const localData = ref(initializeData());
+                const mode = ref('single'); 
+                const compareIds = ref([]);
+                const showLagTime = ref(false); 
+                const isGrouped = ref(false); 
+                let chartInstance = null;
+                let compareChartInstance = null;
+
+                const sessions = computed(() => localData.value.sessions);
+                const groupedSessions = computed(() => {
+                    if (!isGrouped.value) return [];
+                    const groups = {};
+                    sessions.value.forEach(s => {
+                        const name = s.strainName || 'Untitled';
+                        if (!groups[name]) groups[name] = { id: 'group-' + name, strainName: name, count: 0, updatedAt: 0, createdAt: s.createdAt, points: [] };
+                        groups[name].count++;
+                        if (s.updatedAt > groups[name].updatedAt) groups[name].updatedAt = s.updatedAt;
+                        if (s.createdAt < groups[name].createdAt) groups[name].createdAt = s.createdAt;
+                        groups[name].points.push(...s.points);
+                    });
+                    return Object.values(groups).sort((a,b) => b.updatedAt - a.updatedAt);
+                });
+                const sortedSessions = computed(() => [...sessions.value].sort((a,b) => b.updatedAt - a.updatedAt));
+                const displayList = computed(() => isGrouped.value ? groupedSessions.value : sortedSessions.value);
+                const activeSession = computed(() => {
+                    if (isGrouped.value) {
+                         const group = groupedSessions.value.find(g => g.id === localData.value.activeId);
+                         if (!group) return null;
+                         return { id: group.id, strainName: group.strainName, memo: `Integrated Analysis of ${group.count} sessions.`, points: group.points, updatedAt: group.updatedAt, createdAt: group.createdAt};
+                    } else return sessions.value.find(s => s.id === localData.value.activeId) || null;
+                });
+                const results = computed(() => activeSession.value ? calculateGrowthParams(activeSession.value.points) : {});
+
+                const addDataPoint = () => { if(activeSession.value && !isGrouped.value) { const pts = activeSession.value.points; if (pts.length === 0) pts.push({ time: 0, od: 0.05 }); else { const last = pts[pts.length - 1]; const nextTime = (parseFloat(last.time) || 0) + 1; const lastOD = parseFloat(last.od) || 0.05; pts.push({ time: nextTime, od: lastOD }); } emitUpdate(); }};
+                const removeDataPoint = (idx) => { if(activeSession.value && !isGrouped.value) { activeSession.value.points.splice(idx, 1); emitUpdate(); }};
+                const createNewSession = () => { if (isGrouped.value) return; const now = Date.now(); const newSession = { id: now, strainName: '', memo: '', points: [{time: 0, od: 0.05}], createdAt: now, updatedAt: now }; localData.value.sessions.unshift(newSession); localData.value.activeId = newSession.id; emitUpdate(); };
+                const deleteSession = (id) => { if(isGrouped.value) return; if(!confirm("Delete this session?")) return; const idx = localData.value.sessions.findIndex(s => s.id === id); if(idx!==-1) { localData.value.sessions.splice(idx,1); if(localData.value.activeId===id) localData.value.activeId=localData.value.sessions[0]?.id||null; emitUpdate(); }};
+                const emitUpdate = () => { if(activeSession.value && !isGrouped.value) activeSession.value.updatedAt = Date.now(); emit('update', localData.value); };
+                const handleListClick = (item) => { if (mode.value === 'single') localData.value.activeId = item.id; };
+                const isItemActive = (id) => mode.value === 'single' && localData.value.activeId === id;
+                const toggleGrouping = () => { isGrouped.value = !isGrouped.value; localData.value.activeId = null; };
+                const toggleCompare = (id) => { const idx = compareIds.value.indexOf(id); if (idx === -1) compareIds.value.push(id); else compareIds.value.splice(idx, 1); };
+
+                const updateChart = () => {
+                    if (mode.value !== 'single' || !activeSession.value) return;
+                    const ctx = document.getElementById('growthChart');
+                    if (!ctx) return;
+                    
+                    // Safety check if results are empty
+                    if (!results.value || !results.value.validData) {
+                        if (chartInstance) { chartInstance.data.datasets = []; chartInstance.update(); }
+                        return;
+                    }
+
+                    const { validData, mu, intercept, lag, minOD } = results.value;
+                    const rawPoints = validData ? validData.map(p => ({ x: p.t, y: p.od })) : [];
+                    let curvePoints = [], lagLine = [], baseline = [];
+                    if (mu && mu > 0 && validData.length > 0) {
+                        const maxT = validData[validData.length - 1].t * 1.2;
+                        for (let t = validData[0].t; t <= maxT; t += (maxT/50)) curvePoints.push({ x: t, y: Math.exp(intercept + mu * t) });
+                        if (showLagTime.value && lag !== null) { lagLine.push({x: lag, y: 0}, {x: lag, y: Math.exp(intercept + mu * lag) * 1.5}); baseline.push({x: 0, y: minOD}, {x: maxT, y: minOD}); }
+                    }
+                    const datasets = [{ label: 'Measured', data: rawPoints, backgroundColor: '#4F46E5', pointRadius: 5 }, { label: 'Fit', data: curvePoints, type: 'line', borderColor: '#10B981', borderWidth: 2, pointRadius: 0, borderDash: [5,5] }];
+                    if (showLagTime.value && lag !== null) { datasets.push({ label: 'Lag Time', data: lagLine, type: 'line', borderColor: '#F97316', borderWidth: 2, pointRadius: 0 }); datasets.push({ label: 'Baseline', data: baseline, type: 'line', borderColor: '#94A3B8', borderWidth: 1, pointRadius: 0, borderDash: [2,2] }); }
+                    if (chartInstance) { chartInstance.data.datasets = datasets; chartInstance.update(); } else { chartInstance = new Chart(ctx, { type: 'scatter', data: { datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'linear', position: 'bottom', title: {display:true, text:'Time (h)'} }, y: { min:0, title: {display:true, text:'OD600'} } } } }); }
+                };
+
+                const updateCompareChart = () => {
+                    if (mode.value !== 'compare') return;
+                    const ctx = document.getElementById('compareChart');
+                    if (!ctx) return;
+
+                    const colors = ['#4f46e5', '#db2777', '#ea580c', '#16a34a', '#0891b2', '#9333ea'];
+                    let datasets = [];
+
+                    compareIds.value.forEach((id, index) => {
+                        const session = sessions.value.find(s => s.id === id);
+                        if (!session) return;
+                        const points = session.points;
+                        const data = points.filter(p=>p.time!==""&&p.od!=="").map(p=>({x: parseFloat(p.time), y: parseFloat(p.od)})).sort((a,b)=>a.x-b.x);
+                        const color = colors[index % colors.length];
+                        
+                        // Scatter Data
+                        datasets.push({
+                            label: session.strainName || `Session ${index+1}`,
+                            data: data,
+                            borderColor: color,
+                            backgroundColor: color,
+                            pointRadius: 4,
+                            order: 1
+                        });
+
+                        // Calculate Trendline
+                        const { validData, mu, intercept } = calculateGrowthParams(points);
+                        if (mu && mu > 0 && validData && validData.length > 0) {
+                            const curvePoints = [];
+                            const maxT = validData[validData.length - 1].t * 1.2;
+                            for (let t = validData[0].t; t <= maxT; t += (maxT/50)) {
+                                curvePoints.push({ x: t, y: Math.exp(intercept + mu * t) });
+                            }
+                            datasets.push({
+                                label: (session.strainName || `Session ${index+1}`) + ' (Fit)',
+                                data: curvePoints,
+                                type: 'line',
+                                borderColor: color,
+                                borderWidth: 1,
+                                pointRadius: 0,
+                                borderDash: [5,5],
+                                fill: false,
+                                order: 2
+                            });
+                        }
+                    });
+
+                    if (compareChartInstance) {
+                        compareChartInstance.data.datasets = datasets;
+                        compareChartInstance.update();
+                    } else {
+                        compareChartInstance = new Chart(ctx, {
+                            type: 'scatter',
+                            data: { datasets },
+                            options: { 
+                                responsive: true, 
+                                maintainAspectRatio: false,
+                                scales: { x: { type: 'linear', position: 'bottom', title: {display:true, text:'Time (h)'} }, y: { min:0, title: {display:true, text:'OD600'} } },
+                                plugins: { tooltip: { mode: 'index', intersect: false } }
+                            }
+                        });
+                    }
+                };
+
+                watch(
+                    () => [localData.value.activeId, results.value, mode.value, showLagTime.value], 
+                    () => { 
+                        nextTick(() => { 
+                            if(mode.value==='single') updateChart(); 
+                            else updateCompareChart(); 
+                        });
+                    }, 
+                    { deep: true }
+                );
+                
+                watch(
+                    () => compareIds.value, 
+                    () => { if(mode.value==='compare') nextTick(updateCompareChart); }, 
+                    { deep: true }
+                );
+                
+                onMounted(() => { setTimeout(updateChart, 100); });
+
+                return { 
+                    localData, sessions, sortedSessions, displayList, activeSession, 
+                    createNewSession, deleteSession, addDataPoint, removeDataPoint, emitUpdate, 
+                    results, formatDate, mode, handleListClick, isItemActive, 
+                    compareIds, toggleCompare, showLagTime, isGrouped, toggleGrouping 
+                };
+            }
+        };
+
+        // --- Prompt Notebook (Reused) ---
+        const PromptNotebook = {
+            template: '#prompt-notebook-template',
+            props: ['data'],
+            emits: ['update'],
+            setup(props, { emit }) {
+                const formatDate = (ts) => ts ? new Date(ts).toLocaleString('ko-KR', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+                const localData = ref(props.data || { notes: [], activeId: null });
+                const activeNote = computed(() => localData.value.notes.find(n => n.id === localData.value.activeId));
+                const sortedNotes = computed(() => [...localData.value.notes].sort((a, b) => b.updatedAt - a.updatedAt));
+                const addNote = () => { const newNote = { id: Date.now(), title: '', content: '', createdAt: Date.now(), updatedAt: Date.now() }; localData.value.notes.unshift(newNote); localData.value.activeId = newNote.id; emitUpdate(); };
+                const selectNote = (id) => localData.value.activeId = id;
+                const deleteNote = (id) => { if(confirm('Delete note?')) { const idx = localData.value.notes.findIndex(n => n.id === id); if(idx>-1) { localData.value.notes.splice(idx,1); if(localData.value.activeId===id) localData.value.activeId=null; emitUpdate(); }}};
+                const touchNote = () => { if(activeNote.value) { activeNote.value.updatedAt = Date.now(); emitUpdate(); }};
+                const emitUpdate = () => emit('update', localData.value);
+                return { localData, activeNote, sortedNotes, addNote, selectNote, deleteNote, touchNote, formatDate };
+            }
+        };
+
+        // --- Main App ---
+        const app = createApp({
+            setup() {
+                const modules = ref([
+                    { id: 'growth', name: 'Growth Analyzer', component: GrowthAnalyzer, icon: 'analytics', isExternal: false },
+                    { id: 'notebook', name: 'Lab Notebook', component: PromptNotebook, icon: 'library_books', isExternal: false }
+                ]);
+                const activeModuleId = ref('growth');
+                const appState = ref({});
+                const showPromptModal = ref(false);
+                const showPasteModal = ref(false);
+                const showSnapshotModal = ref(false);
+                const snapshots = ref([]);
+                const pasteContent = ref('');
+                const isDragging = ref(false);
+                const fileHandle = ref(null); 
+                
+                // Computed Converter Prompt
+                const converterPrompt = computed(() => {
+                    const currentStateExample = JSON.stringify(appState.value, null, 2).substring(0, 500) + "\n... (omitted)";
+                    return `"내가 가진 HTML/JS 코드를 'Bio-Lab Workspace' 호환 모듈로 변환해줘.
+
+[Workflow]
+1. 기능 기획: Gemini/ChatGPT에게 원하는 기능(예: Buffer Calculator)의 단일 HTML 코드를 요청.
+2. 기능 확인: 코드가 브라우저에서 잘 작동하는지 확인.
+3. 변환 요청: 아래 '규격 요구사항'과 '데이터 구조'를 참고하여 코드를 변환 요청.
+4. 통합: 결과물을 Bio-Lab Workspace에 드래그하거나 붙여넣기.
+
+[규격 요구사항]
+1. 단일 .html 파일로 작성.
+2. UI는 <script type="text/x-template" id="my-module-template"> 안에 작성.
+3. Vue 컴포넌트 로직은 const MyModule = { template: '#my-module-template', setup(props, { emit }) { ... } } 형태로 작성.
+4. 데이터 통신: 
+   - 초기 데이터는 props.data로 받음.
+   - 데이터 변경 시 emit('update', newData) 호출 필수.
+   - newData는 해당 모듈의 전체 상태 객체여야 함.
+5. Tailwind CSS 클래스 사용.
+
+[현재 앱 데이터 구조 예시 (appState)]
+이 구조를 참고하여, 새 모듈이 자신의 데이터를 저장할 구조를 설계하세요.
+${currentStateExample}
+
+[작성 예시]
+const MyModule = {
+  template: '#tpl',
+  props: ['data'],
+  setup(props, { emit }) {
+    // 초기화: props.data가 비어있을 경우 기본값 설정
+    const localData = Vue.ref(props.data || { count: 0 });
+    
+    const increment = () => {
+      localData.value.count++;
+      // 변경 사항 상위 전파 (자동 저장됨)
+      emit('update', localData.value);
+    };
+    return { localData, increment };
+  }
+}"`;
+                });
+
+                const MODULE_STORAGE_KEY = 'bioLabExternalModules_v1';
+                const SNAPSHOT_INDEX_KEY = 'bioLab_snapshot_index';
+
+                const installModule = (htmlContent, fileName, saveToStorage = false) => {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(htmlContent, 'text/html');
+                    const templates = doc.querySelectorAll('script[type="text/x-template"]');
+                    if (templates.length === 0) return { success: false, error: "No <script type='text/x-template'> found." };
+
+                    const idMap = {};
+                    templates.forEach(tpl => {
+                        const oldId = tpl.id;
+                        const newId = oldId ? `imported-${oldId}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}` : `imported-tpl-${Date.now()}`;
+                        if (oldId) idMap[oldId] = newId;
+                        const newTpl = document.createElement('script');
+                        newTpl.type = 'text/x-template';
+                        newTpl.id = newId;
+                        newTpl.innerHTML = tpl.innerHTML;
+                        document.body.appendChild(newTpl);
+                    });
+
+                    const scripts = doc.querySelectorAll('script:not([type])');
+                    let componentObj = null;
+                    for (let script of scripts) {
+                        let scriptContent = script.textContent;
+                        for (const [oldId, newId] of Object.entries(idMap)) { scriptContent = scriptContent.split(`#${oldId}`).join(`#${newId}`); }
+                        scriptContent = scriptContent.replace(/createApp\s*\(.*?\)\s*\.mount\s*\(.*?\)/g, '// createApp removed');
+                        const varMatch = scriptContent.match(/const\s+(\w+)\s*=\s*\{/);
+                        if (varMatch) {
+                            try {
+                                const factory = new Function(scriptContent + "\nreturn " + varMatch[1] + ";");
+                                componentObj = factory();
+                                if (componentObj) break;
+                            } catch (err) { console.error("Script execution error:", err); }
+                        }
+                    }
+
+                    if (componentObj) {
+                        const moduleName = fileName.replace('.html', '');
+                        const newModuleId = 'mod-' + Date.now() + Math.random().toString(16).substr(2, 5);
+                        modules.value.push({ id: newModuleId, name: moduleName, component: componentObj, icon: componentObj.icon || 'extension', isExternal: true });
+                        if (saveToStorage) {
+                            try {
+                                const savedModules = JSON.parse(localStorage.getItem(MODULE_STORAGE_KEY) || '[]');
+                                const idx = savedModules.findIndex(m => m.name === fileName || m.name === moduleName);
+                                if(idx > -1) savedModules[idx] = { name: moduleName, content: htmlContent };
+                                else savedModules.push({ name: moduleName, content: htmlContent });
+                                localStorage.setItem(MODULE_STORAGE_KEY, JSON.stringify(savedModules));
+                            } catch (e) { console.error("Storage Error:", e); alert("Storage full"); }
+                        }
+                        return { success: true, moduleId: newModuleId };
+                    } else { return { success: false, error: "Component definition not found." }; }
+                };
+
+                const renameModule = (module) => {
+                    const newName = prompt("Rename this app:", module.name);
+                    if (newName && newName.trim() !== "") {
+                        const oldName = module.name;
+                        module.name = newName.trim();
+                        if (module.isExternal) {
+                            try {
+                                const savedModules = JSON.parse(localStorage.getItem(MODULE_STORAGE_KEY) || '[]');
+                                const target = savedModules.find(m => m.name === oldName);
+                                if (target) {
+                                    target.name = module.name;
+                                    localStorage.setItem(MODULE_STORAGE_KEY, JSON.stringify(savedModules));
+                                }
+                            } catch (e) { console.error(e); }
+                        }
+                    }
+                };
+
+                const removeModule = (module) => {
+                    if (!confirm(`Remove '${module.name}'?`)) return;
+                    const idx = modules.value.findIndex(m => m.id === module.id);
+                    if (idx > -1) {
+                        modules.value.splice(idx, 1);
+                        if (activeModuleId.value === module.id) activeModuleId.value = 'growth';
+                    }
+                    try {
+                        const savedModules = JSON.parse(localStorage.getItem(MODULE_STORAGE_KEY) || '[]');
+                        const filtered = savedModules.filter(m => m.name !== module.name);
+                        localStorage.setItem(MODULE_STORAGE_KEY, JSON.stringify(filtered));
+                    } catch (e) { console.error(e); }
+                };
+
+                const loadSnapshotsList = () => {
+                    try {
+                        snapshots.value = JSON.parse(localStorage.getItem(SNAPSHOT_INDEX_KEY) || '[]');
+                    } catch (e) { console.error(e); snapshots.value = []; }
+                };
+
+                const saveSnapshot = () => {
+                    const name = prompt("Enter a name for this snapshot:", `Backup ${new Date().toLocaleString()}`);
+                    if (!name) return;
+                    try {
+                        const key = `bioLab_snap_${name}`;
+                        localStorage.setItem(key, JSON.stringify(appState.value));
+                        loadSnapshotsList();
+                        const now = new Date().toLocaleString();
+                        const idx = snapshots.value.findIndex(s => s.name === name);
+                        if (idx > -1) snapshots.value[idx].date = now;
+                        else snapshots.value.unshift({ name, date: now });
+                        localStorage.setItem(SNAPSHOT_INDEX_KEY, JSON.stringify(snapshots.value));
+                        alert("Snapshot Saved to Browser Storage!");
+                    } catch (e) { console.error(e); alert("Failed to save snapshot (Storage might be full)."); }
+                };
+
+                const loadSnapshot = (name) => {
+                    if (!confirm("Load snapshot? Current unsaved changes will be overwritten.")) return;
+                    try {
+                        const key = `bioLab_snap_${name}`;
+                        const saved = localStorage.getItem(key);
+                        if (saved) {
+                            appState.value = JSON.parse(saved);
+                            localStorage.setItem('bioLabData_v2_3', saved);
+                            showSnapshotModal.value = false;
+                            alert("Snapshot Loaded!");
+                            window.location.reload(); 
+                        } else { alert("Snapshot data not found."); }
+                    } catch (e) { console.error(e); alert("Failed to load snapshot."); }
+                };
+
+                const deleteSnapshot = (name) => {
+                    if (!confirm(`Delete snapshot '${name}'?`)) return;
+                    try {
+                        localStorage.removeItem(`bioLab_snap_${name}`);
+                        snapshots.value = snapshots.value.filter(s => s.name !== name);
+                        localStorage.setItem(SNAPSHOT_INDEX_KEY, JSON.stringify(snapshots.value));
+                    } catch (e) { console.error(e); }
+                };
+
+                const openSnapshotList = () => {
+                    loadSnapshotsList();
+                    showSnapshotModal.value = true;
+                };
+
+                onMounted(() => {
+                    const savedData = localStorage.getItem('bioLabData_v2_3');
+                    if (savedData) { try { appState.value = JSON.parse(savedData); } catch (e) { console.error(e); } }
+                    const savedModules = localStorage.getItem(MODULE_STORAGE_KEY);
+                    if (savedModules) { try { JSON.parse(savedModules).forEach(m => installModule(m.content, m.name, false)); } catch (e) { console.error(e); } }
+                });
+
+                const activeComponent = computed(() => modules.value.find(m => m.id === activeModuleId.value)?.component || null);
+                const currentModuleData = computed(() => appState.value[activeModuleId.value]);
+                const updateModuleData = (newData) => { appState.value[activeModuleId.value] = newData; localStorage.setItem('bioLabData_v2_3', JSON.stringify(appState.value)); };
+                const exportData = () => { const node = document.createElement('a'); node.href = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appState.value, null, 2)); node.download = `bio_lab_data.json`; node.click(); };
+                const importData = (e) => { const r = new FileReader(); r.onload = (ev) => { try { appState.value = { ...appState.value, ...JSON.parse(ev.target.result) }; alert("Imported!"); } catch { alert("Error"); } }; r.readAsText(e.target.files[0]); };
+                const copyPrompt = () => { navigator.clipboard.writeText(converterPrompt.value); alert("Copied!"); };
+
+                const loadModuleFromFile = (e) => processFile(e.target.files[0]);
+                const handleDrop = (e) => { isDragging.value = false; processFile(e.dataTransfer.files[0]); };
+                const processFile = (file) => {
+                    if (!file) return;
+                    const r = new FileReader();
+                    r.onload = (e) => {
+                        const res = installModule(e.target.result, file.name, true);
+                        if (res.success) { activeModuleId.value = res.moduleId; alert("Module Loaded!"); }
+                        else alert(res.error);
+                    };
+                    r.readAsText(file);
+                };
+                const handlePasteLoad = () => {
+                    if(!pasteContent.value.trim()) return;
+                    const res = installModule(pasteContent.value, `Pasted Module ${Date.now()}.html`, true);
+                    if (res.success) { activeModuleId.value = res.moduleId; showPasteModal.value = false; pasteContent.value = ''; alert("Module Loaded!"); }
+                    else alert(res.error);
+                };
+
+                return { 
+                    modules, activeModuleId, activeComponent, currentModuleData, updateModuleData, 
+                    exportData, importData, loadModuleFromFile, showPromptModal, converterPrompt, copyPrompt, 
+                    removeModule, isDragging, handleDrop, showPasteModal, pasteContent, handlePasteLoad, renameModule,
+                    saveSnapshot, loadSnapshot, deleteSnapshot, snapshots, showSnapshotModal, openSnapshotList
+                };
+            }
+        });
+        app.mount('#app');
+    </script>
+</body>
+</html>

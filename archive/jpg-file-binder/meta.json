@@ -1,0 +1,9 @@
+{
+  "id": "jpg-file-binder",
+  "title": "JPG-file-binder",
+  "description": "파일을 이미지와 합쳐 파일을 숨긴 이미지로 변환합니다.",
+  "tags": [],
+  "type": "html",
+  "mainFile": "index.html",
+  "parameters": []
+}

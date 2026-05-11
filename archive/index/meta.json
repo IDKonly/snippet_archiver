@@ -1,0 +1,11 @@
+{
+  "id": "index",
+  "title": " Bio-Lab Workspace",
+  "description": "Cell manager 프로토타입",
+  "tags": [
+    "imported"
+  ],
+  "type": "html",
+  "mainFile": "index.html",
+  "parameters": []
+}

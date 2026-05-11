@@ -1,0 +1,9 @@
+{
+  "id": "0000-png-제외-png-파일-삭제",
+  "title": "0000.png 제외 PNG 파일 삭제",
+  "description": "0000.png 제외 PNG 파일 삭제\n",
+  "tags": [],
+  "type": "cmd",
+  "mainFile": "command.txt",
+  "parameters": []
+}

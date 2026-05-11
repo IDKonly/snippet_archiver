@@ -1,0 +1,25 @@
+{
+  "id": "pptx-image-nagnifier",
+  "title": "pptx image nagnifier",
+  "description": "pptx 파일 내부의 이미지를 n배 확대한 크롭이미지로 변경시킵니다. 일괄적인 수정이 필요할 때 사용합니다.",
+  "tags": [],
+  "type": "python",
+  "mainFile": "main.py",
+  "parameters": [
+    {
+      "name": "INPUT_PPTX_P",
+      "defaultValue": "",
+      "description": ""
+    },
+    {
+      "name": "OUTPUT_PPTX_P",
+      "defaultValue": "",
+      "description": ""
+    },
+    {
+      "name": "TARGET_ZOOM_P",
+      "defaultValue": "2.0",
+      "description": ""
+    }
+  ]
+}

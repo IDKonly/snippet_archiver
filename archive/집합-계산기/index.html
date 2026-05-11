@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>단어 목록 세트 계산기</title>
+    <!-- Tailwind CSS 로드 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue 3 로드 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Material Icons 로드 -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+    
+    <style>
+        .custom-textarea::-webkit-scrollbar { width: 8px; }
+        .custom-textarea::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .custom-textarea::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-textarea::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* 토스트 메시지 애니메이션 */
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.5s; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen p-4 flex items-center justify-center font-sans">
+
+    <!-- Vue 앱이 마운트될 DOM 요소 -->
+    <div id="app" class="w-full max-w-5xl bg-white shadow-xl rounded-2xl p-6 md:p-8 relative">
+        
+        <!-- 복사 완료 알림 (alert 대체) -->
+        <transition name="fade">
+            <div v-if="toastMessage" class="absolute top-4 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-lg text-sm z-50 flex items-center gap-2">
+                <span class="material-icons-outlined text-green-400 text-sm">check_circle</span>
+                {{ toastMessage }}
+            </div>
+        </transition>
+
+        <header class="mb-6 border-b pb-4">
+            <h2 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                <span class="material-icons-outlined text-indigo-600">calculate</span>
+                단어 목록 세트 계산기
+            </h2>
+            <p class="text-slate-500 text-sm mt-1">두 목록(A, B)의 단어들을 비교하여 합집합, 교집합, 차집합을 계산합니다.</p>
+        </header>
+
+        <div class="space-y-6">
+            <!-- 입력 섹션 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="flex flex-col">
+                    <label class="block text-sm font-bold text-slate-700 mb-2 flex justify-between">
+                        목록 A
+                        <span class="text-xs font-normal text-slate-400">({{ countA }}개)</span>
+                    </label>
+                    <textarea 
+                        v-model="textA" 
+                        class="custom-textarea w-full h-[250px] p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-sm leading-relaxed resize-none" 
+                        placeholder="첫 번째 목록 입력 (한 줄에 한 단어)"
+                    ></textarea>
+                </div>
+                <div class="flex flex-col">
+                    <label class="block text-sm font-bold text-slate-700 mb-2 flex justify-between">
+                        목록 B
+                        <span class="text-xs font-normal text-slate-400">({{ countB }}개)</span>
+                    </label>
+                    <textarea 
+                        v-model="textB" 
+                        class="custom-textarea w-full h-[250px] p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition text-sm leading-relaxed resize-none" 
+                        placeholder="두 번째 목록 입력 (한 줄에 한 단어)"
+                    ></textarea>
+                </div>
+            </div>
+
+            <!-- 버튼 섹션 -->
+            <div class="flex flex-wrap justify-center gap-3 py-2 bg-slate-50 rounded-xl border border-slate-200 p-4">
+                <button @click="calculate('union')" class="flex items-center gap-1 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-blue-700 hover:shadow-md transition transform active:scale-95">
+                    <span>∪</span> 합집합
+                </button>
+                <button @click="calculate('intersection')" class="flex items-center gap-1 px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-green-700 hover:shadow-md transition transform active:scale-95">
+                    <span>∩</span> 교집합
+                </button>
+                <button @click="calculate('diffAB')" class="flex items-center gap-1 px-4 py-2 bg-red-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-red-700 hover:shadow-md transition transform active:scale-95">
+                    <span>A-B</span> 차집합
+                </button>
+                <button @click="calculate('diffBA')" class="flex items-center gap-1 px-4 py-2 bg-purple-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-purple-700 hover:shadow-md transition transform active:scale-95">
+                    <span>B-A</span> 차집합
+                </button>
+                <div class="w-px h-8 bg-slate-300 mx-1 hidden sm:block"></div>
+                <button @click="clearAll" class="flex items-center gap-1 px-4 py-2 bg-slate-500 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-slate-600 hover:shadow-md transition transform active:scale-95">
+                    <span class="material-icons-outlined text-sm">refresh</span> 초기화
+                </button>
+            </div>
+
+            <!-- 결과 섹션 -->
+            <div class="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden flex flex-col">
+                <div class="bg-white px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                    <label class="font-bold text-slate-700 flex items-center gap-2">
+                        결과 
+                        <span v-if="resultType" class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full border border-slate-200">
+                            {{ resultType }}: {{ resultCount }}개
+                        </span>
+                    </label>
+                    <button @click="copyToClipboard" class="text-xs flex items-center gap-1 text-slate-500 hover:text-indigo-600 font-medium transition cursor-pointer bg-transparent border-0 p-1 rounded hover:bg-slate-100">
+                        <span class="material-icons-outlined text-sm">content_copy</span> 복사
+                    </button>
+                </div>
+                <textarea 
+                    v-model="resultText" 
+                    readonly 
+                    class="custom-textarea w-full p-4 bg-slate-50 text-slate-800 text-sm outline-none resize-y min-h-[150px] max-h-[300px]" 
+                    placeholder="위의 버튼을 눌러 계산을 수행하세요."
+                ></textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed } = Vue;
+
+        createApp({
+            setup() {
+                // 상태 변수
+                const textA = ref('');
+                const textB = ref('');
+                const resultText = ref('');
+                const resultType = ref('');
+                const resultCount = ref(0);
+                const toastMessage = ref('');
+                let toastTimeout = null;
+
+                // 입력된 줄 수 계산 (실시간)
+                const countA = computed(() => textA.value.split('\n').filter(s => s.trim()).length);
+                const countB = computed(() => textB.value.split('\n').filter(s => s.trim()).length);
+
+                // 헬퍼: 텍스트 -> Set 변환
+                const getSets = () => {
+                    const setA = new Set(textA.value.split('\n').map(s => s.trim()).filter(s => s.length > 0));
+                    const setB = new Set(textB.value.split('\n').map(s => s.trim()).filter(s => s.length > 0));
+                    return { setA, setB };
+                };
+
+                // 계산 로직 통합
+                const calculate = (type) => {
+                    const { setA, setB } = getSets();
+                    let resultSet = new Set();
+                    let typeLabel = '';
+
+                    if (type === 'union') {
+                        resultSet = new Set([...setA, ...setB]);
+                        typeLabel = '합집합 (A ∪ B)';
+                    } else if (type === 'intersection') {
+                        resultSet = new Set([...setA].filter(x => setB.has(x)));
+                        typeLabel = '교집합 (A ∩ B)';
+                    } else if (type === 'diffAB') {
+                        resultSet = new Set([...setA].filter(x => !setB.has(x)));
+                        typeLabel = '차집합 (A - B)';
+                    } else if (type === 'diffBA') {
+                        resultSet = new Set([...setB].filter(x => !setA.has(x)));
+                        typeLabel = '차집합 (B - A)';
+                    }
+
+                    // 결과 업데이트 (정렬하여 표시)
+                    const sortedResult = [...resultSet].sort((a, b) => a.localeCompare(b));
+                    resultText.value = sortedResult.join('\n');
+                    resultCount.value = sortedResult.length;
+                    resultType.value = typeLabel;
+                };
+
+                // 초기화
+                const clearAll = () => {
+                    textA.value = '';
+                    textB.value = '';
+                    resultText.value = '';
+                    resultType.value = '';
+                    resultCount.value = 0;
+                    showToast('초기화 되었습니다.');
+                };
+
+                // 토스트 메시지 표시 함수
+                const showToast = (message) => {
+                    toastMessage.value = message;
+                    if (toastTimeout) clearTimeout(toastTimeout);
+                    toastTimeout = setTimeout(() => {
+                        toastMessage.value = '';
+                    }, 2500);
+                };
+
+                // 클립보드 복사
+                const copyToClipboard = () => {
+                    if (!resultText.value) {
+                        showToast('복사할 결과가 없습니다.');
+                        return;
+                    }
+                    
+                    // iframe 등 환경 제약을 우회하기 위한 방식
+                    const textArea = document.createElement("textarea");
+                    textArea.value = resultText.value;
+                    textArea.style.position = 'fixed';
+                    textArea.style.opacity = '0';
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    
+                    try {
+                        const successful = document.execCommand('copy');
+                        if (successful) {
+                            showToast(`결과 ${resultCount.value}건이 복사되었습니다.`);
+                        } else {
+                            showToast('복사에 실패했습니다.');
+                        }
+                    } catch (err) {
+                        showToast('복사를 지원하지 않는 브라우저입니다.');
+                    } finally {
+                        document.body.removeChild(textArea);
+                    }
+                };
+
+                return {
+                    textA, textB, resultText, resultType, resultCount,
+                    countA, countB, toastMessage,
+                    calculate, clearAll, copyToClipboard
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>

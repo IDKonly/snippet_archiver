@@ -1,0 +1,1 @@
+powershell -Command "$files = Get-ChildItem *.png | Where-Object { $_.Name -notlike '*0000.png' }; $i = 0; foreach ($file in $files) { $i++; Write-Progress -Activity '파일 삭제 중' -Status \"$i / $($files.Count) : $($file.Name)\" -PercentComplete (($i / $files.Count) * 100); Remove-Item $file.FullName }"
