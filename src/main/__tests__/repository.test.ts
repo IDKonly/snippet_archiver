@@ -45,4 +45,15 @@ describe('SnippetRepository', () => {
     expect(snippet?.code).toBe('print("hello")');
     expect(snippet?.metadata.id).toBe('test-1');
   });
+
+  it('should save and retrieve execution logs', async () => {
+    const params = { foo: 'bar', hello: 'world' };
+    await repo.saveSnippetLog('test-1', params);
+
+    const logs = await repo.getSnippetLogs('test-1');
+    expect(logs.length).toBe(1);
+    expect(logs[0].snippetId).toBe('test-1');
+    expect(logs[0].params).toEqual(params);
+    expect(logs[0].timestamp).toBeDefined();
+  });
 });

@@ -18,9 +18,11 @@ import {
   MoreVertical,
   CheckSquare,
   Square,
-  Copy
+  Copy,
+  Sparkles,
+  History
 } from 'lucide-react';
-import { Snippet, SnippetMetadata } from '../common/types';
+import { Snippet, SnippetMetadata, ExecutionLog } from '../common/types';
 import SnippetCard from './components/SnippetCard';
 import ParameterForm from './components/ParameterForm';
 import Console from './components/Console';
@@ -36,6 +38,8 @@ const App: React.FC = () => {
   const [isEditMode, setIsEditMode] = useState(false);
   const [showSource, setShowSource] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [executionLogs, setExecutionLogs] = useState<ExecutionLog[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
   
   const [newSnippet, setNewSnippet] = useState<SnippetMetadata>({
     id: '',
@@ -73,6 +77,15 @@ const App: React.FC = () => {
     }
   };
 
+  const loadExecutionLogs = async (snippetId: string) => {
+    try {
+      const logs = await window.electronAPI.getSnippetLogs(snippetId);
+      setExecutionLogs(logs);
+    } catch (err) {
+      console.error('Failed to load execution logs:', err);
+    }
+  };
+
   const handleSelectSnippet = async (id: string) => {
     try {
       const snippet = await window.electronAPI.getSnippet(id);
@@ -83,10 +96,12 @@ const App: React.FC = () => {
           initialParams[p.name] = p.defaultValue;
         });
         setParamValues(initialParams);
+        await loadExecutionLogs(id);
       }
       setOutput('');
       setStatus(`Selected: ${id}`);
       setShowSource(false);
+      setShowHistory(false);
       setCopied(false);
     } catch (err) {
       console.error('Failed to load snippet', err);
@@ -108,14 +123,12 @@ const App: React.FC = () => {
     setOutput(''); // Reset output on new execution
     try {
       const result = await window.electronAPI.executeSnippet(selectedSnippet.metadata.id, paramValues);
-      // result is the full output, but we also get it via streaming.
-      // To avoid duplication, we only clear at start and rely on streaming, 
-      // or use result if streaming is not available. 
-      // Current main.ts returns full result at end.
       setStatus('Execution finished');
+      await loadExecutionLogs(selectedSnippet.metadata.id);
     } catch (err: any) {
       setOutput(prev => prev + '\n[ERROR]\n' + err.message);
       setStatus('Execution failed');
+      await loadExecutionLogs(selectedSnippet.metadata.id);
     }
   };
 
@@ -153,6 +166,30 @@ const App: React.FC = () => {
       const updatedParams = [...prev.parameters];
       updatedParams[index] = { ...updatedParams[index], [field]: value };
       return { ...prev, parameters: updatedParams };
+    });
+  };
+
+  const getUndetectedParameters = (): string[] => {
+    const regex = /\{([a-zA-Z0-9_\-\s]+)\}/g;
+    const found = new Set<string>();
+    let match;
+    while ((match = regex.exec(newCode)) !== null) {
+      const name = match[1].trim();
+      if (name.length > 0) found.add(name);
+    }
+    const definedNames = new Set(newSnippet.parameters.map(p => p.name));
+    return Array.from(found).filter(name => !definedNames.has(name));
+  };
+
+  const handleAutoDetectParameters = () => {
+    const undetected = getUndetectedParameters();
+    if (undetected.length === 0) return;
+    setNewSnippet(prev => {
+      const newParams = [...prev.parameters];
+      undetected.forEach(name => {
+        newParams.push({ name, defaultValue: '', description: '' });
+      });
+      return { ...prev, parameters: newParams };
     });
   };
 
@@ -216,6 +253,8 @@ const App: React.FC = () => {
   const handleParamChange = (name: string, value: string) => {
     setParamValues(prev => ({ ...prev, [name]: value }));
   };
+
+  const undetectedParams = getUndetectedParameters();
 
   return (
     <div id="app-root" className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30">
@@ -369,7 +408,10 @@ const App: React.FC = () => {
                   <span>{status === 'Executing...' ? 'Running...' : 'Run Snippet'}</span>
                 </button>
                 <button 
-                  onClick={() => setShowSource(!showSource)}
+                  onClick={() => {
+                    setShowSource(!showSource);
+                    setShowHistory(false);
+                  }}
                   className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all active:scale-95 border ${
                     showSource 
                       ? 'bg-blue-600/10 text-blue-400 border-blue-500/30' 
@@ -378,6 +420,20 @@ const App: React.FC = () => {
                 >
                   <Code size={18} />
                   <span>{showSource ? 'Hide Source' : 'View Source'}</span>
+                </button>
+                <button 
+                  onClick={() => {
+                    setShowHistory(!showHistory);
+                    setShowSource(false);
+                  }}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all active:scale-95 border ${
+                    showHistory 
+                      ? 'bg-blue-600/10 text-blue-400 border-blue-500/30' 
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-transparent'
+                  }`}
+                >
+                  <History size={18} />
+                  <span>History</span>
                 </button>
               </div>
 
@@ -411,6 +467,63 @@ const App: React.FC = () => {
                     <pre className="text-slate-300 whitespace-pre-wrap leading-relaxed select-all">
                       {selectedSnippet.code}
                     </pre>
+                  </div>
+                </div>
+              )}
+
+              {showHistory && selectedSnippet && (
+                <div id="history-viewer" className="flex-1 flex flex-col min-h-[200px] max-h-[350px] bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl shrink-0 animate-fadeIn">
+                  <div className="h-10 flex items-center justify-between px-4 bg-slate-900/80 border-b border-slate-800 shrink-0">
+                    <div className="flex items-center gap-2">
+                      <History size={14} className="text-blue-500" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                        Recent Runs ({executionLogs.length})
+                      </span>
+                    </div>
+                    <button 
+                      onClick={() => loadExecutionLogs(selectedSnippet.metadata.id)}
+                      className="text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors"
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-auto p-4 scrollbar-thin scrollbar-thumb-slate-800 bg-slate-950 space-y-3">
+                    {executionLogs.length === 0 ? (
+                      <div className="text-slate-600 italic text-xs py-8 text-center">No recent runs found. Run this snippet to record history.</div>
+                    ) : (
+                      executionLogs.map((log) => (
+                        <div 
+                          key={log.id} 
+                          onClick={() => {
+                            setParamValues(log.params);
+                            setStatus(`Loaded params from ${new Date(log.timestamp).toLocaleTimeString()}`);
+                          }}
+                          className="p-3 bg-slate-900/40 hover:bg-slate-900/85 border border-slate-800/85 hover:border-blue-500/30 rounded-xl cursor-pointer transition-all hover:scale-[1.005] active:scale-[0.995] group/log flex flex-col gap-2"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-slate-500 font-medium">
+                              {new Date(log.timestamp).toLocaleString()}
+                            </span>
+                            <span className="text-[9px] font-semibold text-blue-400 bg-blue-950/50 border border-blue-900/30 px-1.5 py-0.5 rounded opacity-0 group-hover/log:opacity-100 transition-opacity">
+                              Click to fill parameters
+                            </span>
+                          </div>
+                          
+                          {Object.keys(log.params).length === 0 ? (
+                            <span className="text-[10px] text-slate-600 italic">No parameters</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {Object.entries(log.params).map(([key, val]) => (
+                                <span key={key} className="inline-flex items-center text-[10px] font-mono bg-slate-950/60 border border-slate-800/50 px-2 py-0.5 rounded text-slate-400">
+                                  <span className="text-slate-600 mr-1">{key}:</span>
+                                  <span className="text-blue-300/90 truncate max-w-[150px]">{val}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
                   </div>
                 </div>
               )}
@@ -521,6 +634,28 @@ const App: React.FC = () => {
                   onChange={e => setNewCode(e.target.value)} 
                   className="w-full h-48 bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs font-mono outline-none text-slate-300 scrollbar-thin scrollbar-thumb-slate-800"
                 />
+                {undetectedParams.length > 0 && (
+                  <div className="mt-1.5 p-2.5 bg-blue-950/30 border border-blue-900/40 rounded-xl flex items-center justify-between gap-3 text-xs text-blue-300">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <Sparkles size={14} className="text-blue-400 shrink-0" />
+                      <span className="truncate">
+                        Detected placeholders in code:
+                        {undetectedParams.map(p => (
+                          <code key={p} className="bg-blue-900/40 px-1 py-0.5 rounded font-mono text-[10px] text-blue-200 ml-1.5 border border-blue-800/30">
+                            {'{'}{p}{'}'}
+                          </code>
+                        ))}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAutoDetectParameters}
+                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-lg shrink-0 transition-all text-[10px] active:scale-95 shadow-md shadow-blue-950/50"
+                    >
+                      Add All
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col gap-3 border-t border-slate-800 pt-6">

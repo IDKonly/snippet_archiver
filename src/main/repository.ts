@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
-import { Snippet, SnippetMetadata } from '../common/types';
+import { Snippet, SnippetMetadata, ExecutionLog } from '../common/types';
 import { logger } from './logger';
 
 export class SnippetRepository {
@@ -69,6 +69,42 @@ export class SnippetRepository {
       logger.info({ id: metadata.id }, 'Snippet saved');
     } catch (err) {
       logger.error({ err, id: metadata.id }, 'Failed to save snippet');
+      throw err;
+    }
+  }
+
+  async getSnippetLogs(snippetId: string): Promise<ExecutionLog[]> {
+    const logPath = path.join(this.archiveDir, snippetId, 'logs.json');
+    if (!existsSync(logPath)) return [];
+    try {
+      const logsContent = await fs.readFile(logPath, 'utf-8');
+      return JSON.parse(logsContent);
+    } catch (err) {
+      logger.error({ err, snippetId }, 'Failed to read snippet logs');
+      return [];
+    }
+  }
+
+  async saveSnippetLog(snippetId: string, params: Record<string, string>): Promise<void> {
+    const snippetDir = path.join(this.archiveDir, snippetId);
+    try {
+      if (!existsSync(snippetDir)) {
+        await fs.mkdir(snippetDir, { recursive: true });
+      }
+      const logPath = path.join(snippetDir, 'logs.json');
+      const logs = await this.getSnippetLogs(snippetId);
+      const newLog: ExecutionLog = {
+        id: Math.random().toString(36).substring(2, 11),
+        snippetId,
+        timestamp: new Date().toISOString(),
+        params
+      };
+      logs.unshift(newLog);
+      const truncatedLogs = logs.slice(0, 50);
+      await fs.writeFile(logPath, JSON.stringify(truncatedLogs, null, 2));
+      logger.info({ id: snippetId }, 'Execution log saved');
+    } catch (err) {
+      logger.error({ err, snippetId }, 'Failed to save execution log');
       throw err;
     }
   }

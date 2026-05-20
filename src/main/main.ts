@@ -68,11 +68,18 @@ function setupIpc() {
     return { success: false };
   });
 
+  ipcMain.handle('get-snippet-logs', async (_, snippetId: string) => {
+    return await repository.getSnippetLogs(snippetId);
+  });
+
   ipcMain.handle('execute-snippet', async (event, id: string, params: Record<string, string>) => {
     const snippet = await repository.getSnippetById(id);
     if (!snippet) throw new Error('Snippet not found');
 
     const processedCode = executor.replaceParameters(snippet.code, params, snippet.metadata.type);
+    
+    // Save execution log
+    await repository.saveSnippetLog(id, params);
     
     const onOutput = (type: 'stdout' | 'stderr', content: string) => {
       const win = BrowserWindow.fromWebContents(event.sender);

@@ -18,3 +18,10 @@ export interface Snippet {
   metadata: SnippetMetadata;
   code: string;
 }
+
+export interface ExecutionLog {
+  id: string;
+  snippetId: string;
+  timestamp: string; // ISO date string
+  params: Record<string, string>;
+}
