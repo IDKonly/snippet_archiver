@@ -219,15 +219,15 @@ const App: React.FC = () => {
 
   return (
     <div id="app-root" className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30">
-      <header id="main-header" className="h-14 flex items-center justify-between px-4 bg-slate-900 border-b border-slate-800 shadow-lg z-10 shrink-0">
-        <div className="flex items-center gap-2">
+      <header id="main-header" className="h-14 flex items-center justify-between px-4 bg-slate-900 border-b border-slate-800 shadow-lg z-10 shrink-0" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+        <div className="flex items-center gap-2" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <div className="p-1.5 bg-blue-600 rounded-lg shadow-lg shadow-blue-900/20">
             <Archive size={20} className="text-white" />
           </div>
-          <h1 id="app-title" className="text-lg font-bold tracking-tight text-white">Snippet Archiver</h1>
+          <h1 id="app-title" className="text-lg font-bold tracking-tight text-white select-none">Snippet Archiver</h1>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 pr-[138px]" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
           <button 
             id="btn-add-snippet"
             onClick={() => {
