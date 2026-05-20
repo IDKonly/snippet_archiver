@@ -190,11 +190,13 @@ export class SnippetExecutor {
         const win = new BrowserWindow({
           width: 800,
           height: 600,
+          autoHideMenuBar: true,
           webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
           }
         });
+        win.removeMenu();
 
         win.loadFile(tempFile);
         win.on('closed', () => {
@@ -370,17 +372,14 @@ export class SnippetExecutor {
         const win = new BrowserWindow({
           width: 1000,
           height: 800,
+          autoHideMenuBar: true,
           webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
           }
         });
-
+        win.removeMenu();
         win.loadFile(tempFile);
-        // During dev, open devtools to help user see console
-        if (process.env.NODE_ENV === 'development') {
-          win.webContents.openDevTools();
-        }
 
         win.on('closed', () => {
           fs.rm(tempDir, { recursive: true, force: true }).catch(e => logger.error(e));

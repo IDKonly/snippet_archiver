@@ -111,16 +111,17 @@ function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: resolve(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
     },
   });
+  mainWindow.removeMenu();
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:3000');
-    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(resolve(__dirname, '../renderer/index.html'));
   }
