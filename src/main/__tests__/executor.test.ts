@@ -38,6 +38,26 @@ describe('SnippetExecutor', () => {
     expect(output.trim()).toBe('hello');
   });
 
+  it('should safely handle parameters with spaces in CMD', async () => {
+    const code = 'echo {param}';
+    const params = { 'param': 'hello world' };
+    const processed = executor.replaceParameters(code, params, 'cmd');
+    const output = await executor.executeCmd(processed);
+    expect(output.trim()).toBe('hello world');
+  });
+
+  it('should prevent command injection in CMD', async () => {
+    // Attempting to execute 'whoami' via injection
+    const code = 'echo {param}';
+    const params = { 'param': 'test & echo injected' };
+    const processed = executor.replaceParameters(code, params, 'cmd');
+    
+    // With escaping, {param} becomes test ^& echo injected
+    // echo test ^& echo injected prints: test & echo injected
+    const output = await executor.executeCmd(processed);
+    expect(output.trim()).toBe('test & echo injected');
+  });
+
   describe('transformReactCode', () => {
     it('should transform React and Lucide imports', () => {
       const code = `
@@ -61,6 +81,20 @@ describe('SnippetExecutor', () => {
       `;
       const { transformedImports } = executor.transformReactCode(code);
       expect(transformedImports).toContain('const {  useState, useEffect  } = React;');
+    });
+
+    it('should correctly identify the React component name', () => {
+      const code1 = 'function App() { return <div>Hello</div>; }';
+      expect(executor.findComponentName(code1)).toBe('App');
+
+      const code2 = 'export default class MyWidget extends React.Component { render() { return null; } }';
+      expect(executor.findComponentName(code2)).toBe('MyWidget');
+
+      const code3 = 'export default function Hello() { return null; }';
+      expect(executor.findComponentName(code3)).toBe('Hello');
+
+      const code4 = 'const Sidebar = () => null; export default Sidebar;';
+      expect(executor.findComponentName(code4)).toBe('Sidebar');
     });
   });
 });

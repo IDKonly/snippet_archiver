@@ -7,6 +7,9 @@ export interface IElectronAPI {
   exportSnippets: (ids: string[]) => Promise<{ success: boolean; count?: number }>;
   importSnippets: () => Promise<{ success: boolean; count?: number }>;
   executeSnippet: (id: string, params: Record<string, string>) => Promise<string>;
+  onSnippetOutput: (
+    callback: (data: { id: string; type: 'stdout' | 'stderr'; content: string }) => void
+  ) => () => void;
 }
 
 declare global {

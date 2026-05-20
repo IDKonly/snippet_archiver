@@ -10,7 +10,7 @@ import fs from 'fs/promises';
 // Start OpenTelemetry
 startOtel();
 
-const repository = new SnippetRepository(resolve(app.getPath('userData'), 'archive'));
+const repository = new SnippetRepository(resolve(__dirname, '../../archive'));
 const executor = new SnippetExecutor();
 
 function setupIpc() {
@@ -68,18 +68,25 @@ function setupIpc() {
     return { success: false };
   });
 
-  ipcMain.handle('execute-snippet', async (_, id: string, params: Record<string, string>) => {
+  ipcMain.handle('execute-snippet', async (event, id: string, params: Record<string, string>) => {
     const snippet = await repository.getSnippetById(id);
     if (!snippet) throw new Error('Snippet not found');
 
-    const processedCode = executor.replaceParameters(snippet.code, params);
+    const processedCode = executor.replaceParameters(snippet.code, params, snippet.metadata.type);
     
+    const onOutput = (type: 'stdout' | 'stderr', content: string) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win) {
+        win.webContents.send('snippet-output', { id, type, content });
+      }
+    };
+
     if (snippet.metadata.type === 'python') {
-      return await executor.executePython(processedCode);
+      return await executor.executePython(processedCode, onOutput);
     } else if (snippet.metadata.type === 'cmd') {
-      return await executor.executeCmd(processedCode);
+      return await executor.executeCmd(processedCode, onOutput);
     } else if (snippet.metadata.type === 'javascript') {
-      return await executor.executeJs(processedCode);
+      return await executor.executeJs(processedCode, onOutput);
     } else if (snippet.metadata.type === 'react') {
       await executor.executeReact(processedCode);
       return 'React Window opened';

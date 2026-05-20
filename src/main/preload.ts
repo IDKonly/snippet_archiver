@@ -6,6 +6,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveSnippet: (metadata: any, code: string) => ipcRenderer.invoke('save-snippet', metadata, code),
   exportSnippets: (ids: string[]) => ipcRenderer.invoke('export-snippets', ids),
   importSnippets: () => ipcRenderer.invoke('import-snippets'),
-  executeSnippet: (id: string, params: Record<string, string>) => 
-    ipcRenderer.invoke('execute-snippet', id, params),
+  executeSnippet: (id: string, params: Record<string, string>) => ipcRenderer.invoke('execute-snippet', id, params),
+  onSnippetOutput: (callback: (data: { id: string, type: 'stdout' | 'stderr', content: string }) => void) => {
+    const subscription = (_event: any, data: { id: string, type: 'stdout' | 'stderr', content: string }) => callback(data);
+    ipcRenderer.on('snippet-output', subscription);
+    return () => ipcRenderer.removeListener('snippet-output', subscription);
+  }
 });

@@ -1,5 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Plus, 
+  Search, 
+  Settings, 
+  Play, 
+  Edit, 
+  Code, 
+  Terminal, 
+  Trash2, 
+  Download, 
+  Upload, 
+  Check, 
+  X,
+  ChevronRight,
+  Archive,
+  Filter,
+  MoreVertical,
+  CheckSquare,
+  Square,
+  Copy
+} from 'lucide-react';
 import { Snippet, SnippetMetadata } from '../common/types';
+import SnippetCard from './components/SnippetCard';
+import ParameterForm from './components/ParameterForm';
+import Console from './components/Console';
 
 const App: React.FC = () => {
   const [snippets, setSnippets] = useState<SnippetMetadata[]>([]);
@@ -10,6 +34,9 @@ const App: React.FC = () => {
   const [status, setStatus] = useState('Ready');
   const [showAddModal, setShowAddModal] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [showSource, setShowSource] = useState(false);
+  const [copied, setCopied] = useState(false);
+  
   const [newSnippet, setNewSnippet] = useState<SnippetMetadata>({
     id: '',
     title: '',
@@ -23,202 +50,18 @@ const App: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [tagsInput, setTagsInput] = useState('');
 
   useEffect(() => {
     loadSnippets();
+
+    // Set up real-time output listener
+    const unsubscribe = window.electronAPI.onSnippetOutput((data) => {
+      setOutput(prev => prev + data.content);
+    });
+
+    return () => unsubscribe();
   }, []);
-
-  const handleExport = async () => {
-    if (selectedIds.size === 0) {
-      alert('Please select snippets to export.');
-      return;
-    }
-    const result = await window.electronAPI.exportSnippets(Array.from(selectedIds));
-    if (result.success) {
-      alert(`${result.count} snippets exported successfully.`);
-      setIsSelectionMode(false);
-      setSelectedIds(new Set());
-    }
-  };
-
-  const handleImport = async () => {
-    const result = await window.electronAPI.importSnippets();
-    if (result.success) {
-      alert(`${result.count} snippets imported successfully.`);
-      loadSnippets();
-    }
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filteredSnippets.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredSnippets.map(s => s.id)));
-    }
-  };
-
-  const toggleSnippetSelection = (id: string) => {
-    const newSet = new Set(selectedIds);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setSelectedIds(newSet);
-  };
-
-  useEffect(() => {
-    const handleGlobalPaste = (e: ClipboardEvent) => {
-      // 모달이 이미 열려있거나 포커스가 입력 필드에 있는 경우 중단
-      if (showAddModal || ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '')) {
-        return;
-      }
-
-      const text = e.clipboardData?.getData('text');
-      if (text) {
-        handleInjectedContent(text, 'pasted-code');
-      }
-    };
-
-    window.addEventListener('paste', handleGlobalPaste);
-    return () => window.removeEventListener('paste', handleGlobalPaste);
-  }, [showAddModal]);
-
-  const handleInjectedContent = (content: string, defaultName: string) => {
-    let type: 'python' | 'cmd' | 'html' | 'javascript' | 'react' = 'python';
-    let mainFile = 'main.py';
-    let suggestedTitle = defaultName;
-
-    // 간단한 휴리스틱으로 코드 타입 감지
-    const trimmed = content.trim().toLowerCase();
-    if (trimmed.includes('<html') || trimmed.includes('<!doctype') || trimmed.includes('<body')) {
-      type = 'html';
-      mainFile = 'index.html';
-      const titleMatch = content.match(/<title>(.*?)<\/title>/i);
-      if (titleMatch && titleMatch[1]) suggestedTitle = titleMatch[1].trim();
-    } else if (trimmed.startsWith('@echo off') || trimmed.includes('set ') || trimmed.includes('echo ')) {
-      type = 'cmd';
-      mainFile = 'command.txt';
-    } else if (trimmed.includes('console.log') || trimmed.includes('const ') || trimmed.includes('let ') || trimmed.includes('function ')) {
-      type = 'javascript';
-      mainFile = 'main.js';
-      // If it contains JSX tags, it's likely a React component
-      if (trimmed.includes('<') && trimmed.includes('/>') || trimmed.includes('className=') || trimmed.includes('useState') || trimmed.includes('useEffect')) {
-        type = 'react';
-        mainFile = 'index.html';
-      }
-    }
-
-    setNewSnippet({
-      id: slugify(suggestedTitle),
-      title: suggestedTitle,
-      description: `Imported via ${defaultName.includes('pasted') ? 'paste' : 'D&D'}`,
-      tags: ['imported'],
-      type,
-      mainFile,
-      parameters: []
-    });
-    setNewCode(content);
-    setShowAddModal(true);
-  };
-
-  const slugify = (text: string) => {
-    return text
-      .toLowerCase()
-      .replace(/[^a-z0-9가-힣]+/g, '-') // 한글 지원 포함
-      .replace(/(^-|-$)/g, '');
-  };
-
-  const resetNewSnippetState = () => {
-    setNewSnippet({
-      id: '',
-      title: '',
-      description: '',
-      tags: [],
-      type: 'python',
-      mainFile: 'main.py',
-      parameters: []
-    });
-    setNewCode('');
-    setIsEditMode(false);
-  };
-
-  const handleOpenAdd = () => {
-    resetNewSnippetState();
-    setShowAddModal(true);
-  };
-
-  const handleTitleChange = (title: string) => {
-    const updates: Partial<SnippetMetadata> = { title };
-    if (!isEditMode) {
-      updates.id = slugify(title);
-    }
-    setNewSnippet({ ...newSnippet, ...updates });
-  };
-
-  const handleOpenEdit = () => {
-    if (!selectedSnippet) return;
-    setNewSnippet({ ...selectedSnippet.metadata });
-    setNewCode(selectedSnippet.code);
-    setIsEditMode(true);
-    setShowAddModal(true);
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      const file = files[0];
-      const reader = new FileReader();
-      
-      reader.onload = (event) => {
-        const content = event.target?.result as string;
-        const extension = file.name.split('.').pop()?.toLowerCase();
-        
-        let type: 'python' | 'cmd' | 'html' | 'javascript' | 'react' = 'python';
-        let mainFile = 'main.py';
-        let suggestedTitle = file.name.replace(/\.[^/.]+$/, "");
-        
-        if (extension === 'html') {
-          type = 'html';
-          mainFile = 'index.html';
-          // Extract <title> from HTML content
-          const titleMatch = content.match(/<title>(.*?)<\/title>/i);
-          if (titleMatch && titleMatch[1]) {
-            suggestedTitle = titleMatch[1].trim();
-          }
-        } else if (extension === 'bat' || extension === 'cmd' || extension === 'txt') {
-          type = 'cmd';
-          mainFile = 'command.txt';
-        } else if (extension === 'js') {
-          type = 'javascript';
-          mainFile = 'main.js';
-        }
-
-        setNewSnippet({
-          id: file.name.replace(/\.[^/.]+$/, "").replace(/\s+/g, '-').toLowerCase(),
-          title: suggestedTitle,
-          description: `Imported from ${file.name}`,
-          tags: ['imported'],
-          type,
-          mainFile,
-          parameters: []
-        });
-        setNewCode(content);
-        setShowAddModal(true);
-      };
-      
-      reader.readAsText(file);
-    }
-  };
 
   const loadSnippets = async () => {
     try {
@@ -243,42 +86,74 @@ const App: React.FC = () => {
       }
       setOutput('');
       setStatus(`Selected: ${id}`);
+      setShowSource(false);
+      setCopied(false);
     } catch (err) {
       console.error('Failed to load snippet', err);
       setStatus('Error loading snippet detail');
     }
   };
 
+  const handleCopyCode = () => {
+    if (selectedSnippet) {
+      navigator.clipboard.writeText(selectedSnippet.code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   const handleExecute = async () => {
     if (!selectedSnippet) return;
     setStatus('Executing...');
-    setOutput('Running snippet...\n');
+    setOutput(''); // Reset output on new execution
     try {
       const result = await window.electronAPI.executeSnippet(selectedSnippet.metadata.id, paramValues);
-      setOutput(prev => prev + result);
+      // result is the full output, but we also get it via streaming.
+      // To avoid duplication, we only clear at start and rely on streaming, 
+      // or use result if streaming is not available. 
+      // Current main.ts returns full result at end.
       setStatus('Execution finished');
     } catch (err: any) {
-      setOutput(prev => prev + 'Error:\n' + err.message);
+      setOutput(prev => prev + '\n[ERROR]\n' + err.message);
       setStatus('Execution failed');
     }
   };
 
-  const filteredSnippets = snippets.filter(s => 
-    s.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const slugify = (text: string) => {
+    return text
+      .toLowerCase()
+      .replace(/[^a-z0-9가-힣]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+  };
 
-  const handleDoubleClickSnippet = async (s: SnippetMetadata) => {
-    if (s.type === 'html' && s.parameters.length === 0) {
-      setStatus(`Executing ${s.id} immediately...`);
-      try {
-        await window.electronAPI.executeSnippet(s.id, {});
-        setStatus('HTML Window opened (Direct)');
-      } catch (err: any) {
-        alert('Failed to execute: ' + err.message);
-        setStatus('Execution failed');
-      }
+  const handleTitleChange = (title: string) => {
+    const updates: Partial<SnippetMetadata> = { title };
+    if (!isEditMode) {
+      updates.id = slugify(title);
     }
+    setNewSnippet({ ...newSnippet, ...updates });
+  };
+
+  const handleAddParameter = () => {
+    setNewSnippet(prev => ({
+      ...prev,
+      parameters: [...prev.parameters, { name: '', defaultValue: '', description: '' }]
+    }));
+  };
+
+  const handleRemoveParameter = (index: number) => {
+    setNewSnippet(prev => ({
+      ...prev,
+      parameters: prev.parameters.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleNewSnippetParamChange = (index: number, field: 'name' | 'defaultValue' | 'description', value: string) => {
+    setNewSnippet(prev => {
+      const updatedParams = [...prev.parameters];
+      updatedParams[index] = { ...updatedParams[index], [field]: value };
+      return { ...prev, parameters: updatedParams };
+    });
   };
 
   const handleSaveSnippet = async () => {
@@ -286,12 +161,18 @@ const App: React.FC = () => {
       alert('ID, Title, and Code are required.');
       return;
     }
+    const parsedTags = tagsInput
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
+
+    const snippetToSave = {
+      ...newSnippet,
+      tags: parsedTags
+    };
+
     try {
-      console.log('Attempting to save snippet:', newSnippet);
-      if (typeof window.electronAPI.saveSnippet !== 'function') {
-        throw new Error('window.electronAPI.saveSnippet is not defined. Please restart the app.');
-      }
-      await window.electronAPI.saveSnippet(newSnippet, newCode);
+      await window.electronAPI.saveSnippet(snippetToSave, newCode);
       setShowAddModal(false);
       loadSnippets();
       setStatus('Snippet saved successfully');
@@ -300,401 +181,422 @@ const App: React.FC = () => {
     }
   };
 
+  const filteredSnippets = useMemo(() => {
+    if (!searchTerm.trim()) return snippets;
+
+    const parts = searchTerm.toLowerCase().split(/\s+/).filter(p => p.length > 0);
+    
+    return snippets.filter(s => {
+      return parts.every(part => {
+        if (part.startsWith('tag:')) {
+          const tagValue = part.slice(4);
+          return s.tags.some(t => t.toLowerCase().includes(tagValue));
+        }
+        if (part.startsWith('type:')) {
+          const typeValue = part.slice(5);
+          return s.type.toLowerCase().includes(typeValue);
+        }
+        return (
+          s.title.toLowerCase().includes(part) ||
+          s.tags.some(t => t.toLowerCase().includes(part)) ||
+          s.type.toLowerCase().includes(part) ||
+          s.description.toLowerCase().includes(part)
+        );
+      });
+    });
+  }, [snippets, searchTerm]);
+
+  const toggleSnippetSelection = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) newSet.delete(id);
+    else newSet.add(id);
+    setSelectedIds(newSet);
+  };
+
+  const handleParamChange = (name: string, value: string) => {
+    setParamValues(prev => ({ ...prev, [name]: value }));
+  };
+
   return (
-    <div 
-      id="app-container" 
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      style={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
-        height: '100vh', 
-        width: '100vw',
-        overflow: 'hidden',
-        fontFamily: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
-        position: 'relative'
-      }}
-    >
-      {isDragging && (
-        <div id="drag-overlay" style={{
-          position: 'absolute',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(52, 152, 219, 0.3)',
-          border: '4px dashed #3498db',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 2000,
-          pointerEvents: 'none'
-        }}>
-          <h2 style={{ color: '#2980b9', backgroundColor: 'white', padding: '1rem 2rem', borderRadius: '8px' }}>
-            Drop file to add snippet
-          </h2>
-        </div>
-      )}
-      <header id="main-header" style={{ 
-        height: '4rem', 
-        backgroundColor: '#2c3e50', 
-        color: 'white', 
-        display: 'flex', 
-        justifyContent: 'space-between',
-        alignItems: 'center', 
-        padding: '0 1.5rem',
-        boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
-      }}>
-        <h1 id="app-title" style={{ margin: 0, fontSize: '1.5rem' }}>Snippet Archiver</h1>
-        <button 
-          id="btn-add-snippet"
-          onClick={handleOpenAdd}
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: '#3498db',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          + Add Snippet
-        </button>
-      </header>
-      
-      {showAddModal && (
-        <div id="modal-overlay" style={{
-          position: 'fixed',
-          top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          zIndex: 1000
-        }}>
-          <div id="add-snippet-modal" style={{
-            backgroundColor: 'white',
-            padding: '2rem',
-            borderRadius: '8px',
-            width: '80%',
-            maxWidth: '600px',
-            maxHeight: '90vh',
-            overflowY: 'auto'
-          }}>
-            <h2>{isEditMode ? 'Edit Snippet' : 'Add New Snippet'}</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              <input 
-                placeholder="ID (Auto-generated from Title)" 
-                value={newSnippet.id} 
-                onChange={e => setNewSnippet({...newSnippet, id: slugify(e.target.value)})} 
-                disabled={isEditMode}
-                style={{ padding: '0.5rem', backgroundColor: isEditMode ? '#f0f0f0' : 'white' }} 
-              />
-              <input 
-                placeholder="Title" 
-                value={newSnippet.title} 
-                onChange={e => handleTitleChange(e.target.value)} 
-                style={{ padding: '0.5rem' }} 
-              />
-              <textarea placeholder="Description" value={newSnippet.description} onChange={e => setNewSnippet({...newSnippet, description: e.target.value})} style={{ padding: '0.5rem' }} />
-              <select value={newSnippet.type} onChange={e => setNewSnippet({...newSnippet, type: e.target.value as any, mainFile: e.target.value === 'python' ? 'main.py' : (e.target.value === 'html' ? 'index.html' : (e.target.value === 'javascript' ? 'main.js' : 'command.txt'))})} style={{ padding: '0.5rem' }}>
-                <option value="python">Python</option>
-                <option value="cmd">CMD</option>
-                <option value="html">HTML</option>
-                <option value="javascript">JavaScript (Node.js)</option>
-              </select>
-              <textarea 
-                placeholder="Code content... (use {param} for parameters)" 
-                value={newCode} 
-                onChange={e => setNewCode(e.target.value)} 
-                style={{ padding: '0.5rem', height: '200px', fontFamily: 'monospace' }} 
-              />
-              
-              <div style={{ border: '1px solid #ddd', padding: '1rem', borderRadius: '4px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                  <h3 style={{ margin: 0, fontSize: '1rem' }}>Parameter Definitions</h3>
-                  <button 
-                    onClick={() => setNewSnippet({
-                      ...newSnippet, 
-                      parameters: [...newSnippet.parameters, { name: '', defaultValue: '', description: '' }]
-                    })}
-                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}
-                  >
-                    + Add Parameter
-                  </button>
-                </div>
-                {newSnippet.parameters.map((p, index) => (
-                  <div key={index} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                    <input 
-                      placeholder="Name" 
-                      value={p.name} 
-                      onChange={e => {
-                        const updated = [...newSnippet.parameters];
-                        updated[index].name = e.target.value;
-                        setNewSnippet({ ...newSnippet, parameters: updated });
-                      }}
-                      style={{ flex: 1, padding: '0.3rem' }}
-                    />
-                    <input 
-                      placeholder="Default Value" 
-                      value={p.defaultValue} 
-                      onChange={e => {
-                        const updated = [...newSnippet.parameters];
-                        updated[index].defaultValue = e.target.value;
-                        setNewSnippet({ ...newSnippet, parameters: updated });
-                      }}
-                      style={{ flex: 1, padding: '0.3rem' }}
-                    />
-                    <button 
-                      onClick={() => {
-                        const updated = newSnippet.parameters.filter((_, i) => i !== index);
-                        setNewSnippet({ ...newSnippet, parameters: updated });
-                      }}
-                      style={{ padding: '0.3rem', color: 'red' }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                <button onClick={() => { setShowAddModal(false); resetNewSnippetState(); }} style={{ padding: '0.5rem 1rem' }}>Cancel</button>
-                <button onClick={handleSaveSnippet} style={{ padding: '0.5rem 1rem', backgroundColor: '#27ae60', color: 'white', border: 'none', borderRadius: '4px' }}>
-                  {isEditMode ? 'Update' : 'Save'}
-                </button>
-              </div>
-            </div>
+    <div id="app-root" className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-200 font-sans selection:bg-blue-500/30">
+      <header id="main-header" className="h-14 flex items-center justify-between px-4 bg-slate-900 border-b border-slate-800 shadow-lg z-10 shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-blue-600 rounded-lg shadow-lg shadow-blue-900/20">
+            <Archive size={20} className="text-white" />
           </div>
+          <h1 id="app-title" className="text-lg font-bold tracking-tight text-white">Snippet Archiver</h1>
         </div>
-      )}
+        
+        <div className="flex items-center gap-3">
+          <button 
+            id="btn-add-snippet"
+            onClick={() => {
+              setNewSnippet({ id: '', title: '', description: '', tags: [], type: 'python', mainFile: 'main.py', parameters: [] });
+              setNewCode('');
+              setTagsInput('');
+              setIsEditMode(false);
+              setShowAddModal(true);
+            }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold transition-all shadow-lg shadow-blue-900/20 active:scale-95 text-sm"
+          >
+            <Plus size={16} />
+            <span>Add Snippet</span>
+          </button>
+          <button id="btn-settings" className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+            <Settings size={18} />
+          </button>
+        </div>
+      </header>
 
-      <main id="main-content" style={{ 
-        flex: 1, 
-        display: 'flex', 
-        overflow: 'hidden',
-        backgroundColor: '#ecf0f1'
-      }}>
-        <aside id="sidebar" style={{ 
-          width: '20rem', 
-          backgroundColor: 'white',
-          borderRight: '1px solid #bdc3c7', 
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden'
-        }}>
-          <div style={{ padding: '1rem', borderBottom: '1px solid #eee' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-              <h2 id="sidebar-title" style={{ margin: 0, fontSize: '1.2rem' }}>Archive</h2>
+      <main id="main-content" className="flex-1 flex overflow-hidden">
+        <aside id="sidebar" className="w-72 flex flex-col bg-slate-900 border-r border-slate-800 shrink-0">
+          <div className="p-4 flex flex-col gap-3">
+            <div className="relative group">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" />
+              <input 
+                id="search-input"
+                type="text" 
+                placeholder="Search (e.g. tag:python title)" 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-800 border border-slate-700 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-xl py-2 pl-10 pr-4 text-sm outline-none transition-all placeholder:text-slate-500 text-slate-200"
+              />
+            </div>
+            
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Archive</span>
               <button 
+                id="btn-toggle-manage"
                 onClick={() => setIsSelectionMode(!isSelectionMode)}
-                style={{ fontSize: '0.8rem', padding: '0.2rem 0.5rem' }}
+                className={`text-[10px] font-bold uppercase tracking-widest transition-colors ${isSelectionMode ? 'text-blue-400' : 'text-slate-500 hover:text-slate-300'}`}
               >
                 {isSelectionMode ? 'Cancel' : 'Manage'}
               </button>
             </div>
-            
-            {isSelectionMode ? (
-              <div id="selection-controls" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1rem' }}>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button onClick={toggleSelectAll} style={{ flex: 1, fontSize: '0.8rem' }}>
-                    {selectedIds.size === filteredSnippets.length ? 'Deselect All' : 'Select All'}
-                  </button>
-                  <button onClick={handleExport} disabled={selectedIds.size === 0} style={{ flex: 1, fontSize: '0.8rem', backgroundColor: '#2ecc71', color: 'white', border: 'none', borderRadius: '4px' }}>
-                    Export ({selectedIds.size})
-                  </button>
-                </div>
-                <button onClick={handleImport} style={{ fontSize: '0.8rem', backgroundColor: '#34495e', color: 'white', border: 'none', padding: '0.3rem', borderRadius: '4px' }}>
-                  Import JSON
-                </button>
+          </div>
+
+          <div id="snippet-list-container" className="flex-1 overflow-y-auto px-2 pb-4 scrollbar-thin scrollbar-thumb-slate-800">
+            {filteredSnippets.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+                <Filter size={32} className="text-slate-800 mb-2" />
+                <p className="text-sm text-slate-500 font-medium">No snippets found</p>
               </div>
             ) : (
-              <input 
-                id="search-bar-input" 
-                type="text" 
-                placeholder="Search by title or tag..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ 
-                  width: '100%', 
-                  padding: '0.5rem', 
-                  borderRadius: '4px', 
-                  border: '1px solid #ccc',
-                  boxSizing: 'border-box',
-                  marginBottom: '1rem'
-                }} 
-              />
+              <div className="flex flex-col gap-1">
+                {filteredSnippets.map(s => (
+                  <SnippetCard 
+                    key={s.id}
+                    snippet={s}
+                    isSelected={selectedSnippet?.metadata.id === s.id}
+                    isSelectionMode={isSelectionMode}
+                    isManaged={selectedIds.has(s.id)}
+                    onClick={() => isSelectionMode ? toggleSnippetSelection(s.id) : handleSelectSnippet(s.id)}
+                    onDoubleClick={() => {}} // Could add immediate execute here
+                  />
+                ))}
+              </div>
             )}
           </div>
-          <ul id="snippet-list" style={{ 
-            listStyle: 'none', 
-            padding: 0, 
-            margin: 0, 
-            overflowY: 'auto',
-            flex: 1
-          }}>
-            {filteredSnippets.length === 0 ? (
-              <li id="snippet-item-placeholder" style={{ padding: '1rem', color: '#7f8c8d' }}>No snippets found</li>
-            ) : (
-              filteredSnippets.map(s => (
-                <li 
-                  key={s.id} 
-                  id={`snippet-item-${s.id}`}
-                  onClick={() => isSelectionMode ? toggleSnippetSelection(s.id) : handleSelectSnippet(s.id)}
-                  onDoubleClick={() => !isSelectionMode && handleDoubleClickSnippet(s)}
-                  style={{ 
-                    padding: '1rem', 
-                    cursor: 'pointer', 
-                    borderBottom: '1px solid #eee',
-                    backgroundColor: selectedSnippet?.metadata.id === s.id && !isSelectionMode ? '#3498db' : (selectedIds.has(s.id) ? '#ebf5fb' : 'transparent'),
-                    color: selectedSnippet?.metadata.id === s.id && !isSelectionMode ? 'white' : 'black',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}
-                >
-                  {isSelectionMode && (
-                    <input 
-                      type="checkbox" 
-                      checked={selectedIds.has(s.id)} 
-                      onChange={() => {}} // Click on <li> handles this
-                    />
-                  )}
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 'bold' }}>{s.title}</div>
-                    <div style={{ fontSize: '0.8rem', opacity: 0.8 }}>{s.type} | {s.tags.join(', ')}</div>
-                  </div>
-                </li>
-              ))
-            )}
-          </ul>
+
+          {isSelectionMode && (
+            <div id="selection-footer" className="p-4 bg-slate-900 border-t border-slate-800 flex gap-2">
+              <button 
+                onClick={async () => {
+                  const result = await window.electronAPI.exportSnippets(Array.from(selectedIds));
+                  if (result.success) {
+                    setIsSelectionMode(false);
+                    setSelectedIds(new Set());
+                  }
+                }}
+                disabled={selectedIds.size === 0}
+                className="flex-1 flex items-center justify-center gap-2 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all shadow-lg active:scale-95"
+              >
+                <Download size={14} />
+                <span>Export ({selectedIds.size})</span>
+              </button>
+            </div>
+          )}
         </aside>
-        
-        <section id="content-viewer" style={{ 
-          flex: 1, 
-          display: 'flex',
-          flexDirection: 'column',
-          padding: '1.5rem', 
-          overflow: 'hidden'
-        }}>
+
+        <section id="content-viewer" className="flex-1 flex flex-col bg-slate-950 p-6 overflow-hidden">
           {selectedSnippet ? (
-            <div id="snippet-detail-panel" style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              height: '100%',
-              backgroundColor: 'white',
-              borderRadius: '8px',
-              padding: '1.5rem',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
-              overflow: 'hidden'
-            }}>
-              <div id="snippet-info-header" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <h2 id="detail-title" style={{ margin: '0 0 0.5rem 0' }}>{selectedSnippet.metadata.title}</h2>
-                  <p id="detail-description" style={{ color: '#7f8c8d', margin: 0 }}>{selectedSnippet.metadata.description}</p>
-                </div>
-                <button 
-                  id="btn-edit-snippet"
-                  onClick={handleOpenEdit}
-                  style={{
-                    padding: '0.4rem 0.8rem',
-                    backgroundColor: '#f39c12',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem'
-                  }}
-                >
-                  Edit
-                </button>
-              </div>
-
-              <div id="panel-snippet-metadata-editor" style={{ marginBottom: '1.5rem' }}>
-                <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>Parameters</h3>
-                {selectedSnippet.metadata.parameters.length === 0 ? (
-                  <p style={{ fontSize: '0.9rem', color: '#95a5a6' }}>No parameters for this snippet.</p>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '0.5rem' }}>
-                    {selectedSnippet.metadata.parameters.map(p => (
-                      <React.Fragment key={p.name}>
-                        <label style={{ fontSize: '0.9rem', alignSelf: 'center' }}>{p.name}:</label>
-                        <input 
-                          id={`param-input-${p.name}`}
-                          type="text" 
-                          value={paramValues[p.name] || ''} 
-                          onChange={(e) => setParamValues({ ...paramValues, [p.name]: e.target.value })}
-                          style={{ padding: '0.4rem', borderRadius: '4px', border: '1px solid #ccc' }}
-                        />
-                      </React.Fragment>
-                    ))}
+            <div id="detail-panel" className="flex-1 flex flex-col gap-6 overflow-hidden">
+              <div className="flex items-start justify-between shrink-0">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-3 mb-1">
+                    <h2 id="detail-title" className="text-2xl font-bold text-white truncate">{selectedSnippet.metadata.title}</h2>
+                    <span className="px-2 py-0.5 bg-blue-900/30 text-blue-400 border border-blue-500/30 rounded text-[10px] font-bold uppercase tracking-wider">{selectedSnippet.metadata.type}</span>
                   </div>
-                )}
+                  <p id="detail-description" className="text-slate-400 text-sm line-clamp-2 leading-relaxed">{selectedSnippet.metadata.description || 'No description provided.'}</p>
+                </div>
+                
+                <div className="flex items-center gap-2 ml-4">
+                  <button 
+                    id="btn-edit" 
+                    onClick={() => {
+                      setNewSnippet({ ...selectedSnippet.metadata });
+                      setNewCode(selectedSnippet.code);
+                      setTagsInput(selectedSnippet.metadata.tags.join(', '));
+                      setIsEditMode(true);
+                      setShowAddModal(true);
+                    }}
+                    className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all active:scale-95" title="Edit Snippet"
+                  >
+                    <Edit size={20} />
+                  </button>
+                  <button id="btn-more" className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-all active:scale-95" title="More Options">
+                    <MoreVertical size={20} />
+                  </button>
+                </div>
               </div>
 
-              <div id="action-bar" style={{ marginBottom: '1.5rem' }}>
+              <ParameterForm 
+                parameters={selectedSnippet.metadata.parameters}
+                values={paramValues}
+                onChange={handleParamChange}
+              />
+
+              <div className="flex items-center gap-4 shrink-0">
                 <button 
-                  id={`btn-execute-snippet-${selectedSnippet.metadata.id}`}
+                  id={`btn-execute-${selectedSnippet.metadata.id}`}
                   onClick={handleExecute}
-                  style={{ 
-                    padding: '0.7rem 1.5rem', 
-                    backgroundColor: '#27ae60', 
-                    color: 'white', 
-                    border: 'none', 
-                    borderRadius: '4px', 
-                    cursor: 'pointer',
-                    fontWeight: 'bold'
-                  }}
+                  disabled={status === 'Executing...'}
+                  className="flex items-center gap-3 px-8 py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-2xl font-bold transition-all shadow-xl shadow-blue-900/20 active:scale-95 group"
                 >
-                  Execute Snippet
+                  <div className="p-1 bg-white/20 rounded-md group-hover:scale-110 transition-transform">
+                    <Play size={18} fill="currentColor" />
+                  </div>
+                  <span>{status === 'Executing...' ? 'Running...' : 'Run Snippet'}</span>
+                </button>
+                <button 
+                  onClick={() => setShowSource(!showSource)}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all active:scale-95 border ${
+                    showSource 
+                      ? 'bg-blue-600/10 text-blue-400 border-blue-500/30' 
+                      : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-transparent'
+                  }`}
+                >
+                  <Code size={18} />
+                  <span>{showSource ? 'Hide Source' : 'View Source'}</span>
                 </button>
               </div>
 
-              <div id="execution-output-panel" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem' }}>Output</h3>
-                <pre 
-                  id="output-console" 
-                  style={{ 
-                    flex: 1, 
-                    backgroundColor: '#2c3e50', 
-                    color: '#ecf0f1', 
-                    padding: '1rem', 
-                    margin: 0, 
-                    borderRadius: '4px',
-                    overflow: 'auto',
-                    fontSize: '0.9rem'
-                  }}
-                >
-                  {output}
-                </pre>
-              </div>
+              {showSource && selectedSnippet && (
+                <div id="source-viewer" className="flex-1 flex flex-col min-h-[200px] max-h-[350px] bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl shrink-0">
+                  <div className="h-10 flex items-center justify-between px-4 bg-slate-900/80 border-b border-slate-800 shrink-0">
+                    <div className="flex items-center gap-2">
+                      <Code size={14} className="text-blue-500" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                        Source Code ({selectedSnippet.metadata.mainFile})
+                      </span>
+                    </div>
+                    <button 
+                      onClick={handleCopyCode}
+                      className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 hover:text-blue-400 transition-colors"
+                    >
+                      {copied ? (
+                        <>
+                          <Check size={12} className="text-emerald-500" />
+                          <span className="text-emerald-500">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={12} />
+                          <span>Copy</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-auto p-4 font-mono text-xs scrollbar-thin scrollbar-thumb-slate-800 bg-slate-950">
+                    <pre className="text-slate-300 whitespace-pre-wrap leading-relaxed select-all">
+                      {selectedSnippet.code}
+                    </pre>
+                  </div>
+                </div>
+              )}
+
+              <Console 
+                output={output}
+                onClear={() => setOutput('')}
+              />
             </div>
           ) : (
-            <div id="welcome-message" style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              height: '100%',
-              color: '#95a5a6'
-            }}>
-              <h3 style={{ fontSize: '1.5rem' }}>Welcome to Snippet Archiver</h3>
-              <p>Select a snippet from the sidebar to view or execute.</p>
+            <div id="welcome-panel" className="flex-1 flex flex-col items-center justify-center text-center max-w-md mx-auto">
+              <div className="p-6 bg-slate-900 rounded-3xl mb-6 shadow-2xl border border-slate-800">
+                <Archive size={64} className="text-blue-600 opacity-80" />
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-3 tracking-tight">Welcome to Snippet Archiver</h3>
+              <p className="text-slate-500 leading-relaxed mb-8 text-sm">Select a snippet from the sidebar to view details, configure parameters, and execute code in isolated environments.</p>
+              <div className="flex flex-wrap justify-center gap-3">
+                <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs font-semibold text-slate-500">Python 3.x</div>
+                <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs font-semibold text-slate-500">Node.js</div>
+                <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs font-semibold text-slate-500">HTML5/JS</div>
+                <div className="px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs font-semibold text-slate-500">React</div>
+              </div>
             </div>
           )}
         </section>
       </main>
       
-      <footer id="main-footer" style={{ 
-        height: '2rem', 
-        backgroundColor: '#34495e', 
-        color: 'white',
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 1rem',
-        fontSize: '0.8rem'
-      }}>
-        <span id="footer-status">Status: {status}</span>
+      <footer id="main-footer" className="h-8 flex items-center justify-between px-4 bg-slate-900 border-t border-slate-800 text-[10px] font-bold uppercase tracking-widest text-slate-600 shrink-0">
+        <div className="flex items-center gap-4">
+          <span id="footer-status" className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${status === 'Ready' ? 'bg-emerald-500' : (status.includes('Error') || status.includes('failed') ? 'bg-red-500' : 'bg-blue-500 animate-pulse')}`}></span>
+            {status}
+          </span>
+        </div>
+        <div>v1.0.0</div>
       </footer>
+
+      {showAddModal && (
+        <div id="modal-overlay" className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex justify-center items-center z-50 p-6">
+          <div id="add-snippet-modal" className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="p-6 border-b border-slate-800 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white">{isEditMode ? 'Edit Snippet' : 'Add New Snippet'}</h2>
+              <button onClick={() => setShowAddModal(false)} className="p-2 text-slate-400 hover:text-white rounded-lg transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase px-1">Snippet ID</label>
+                  <input 
+                    value={newSnippet.id} 
+                    onChange={e => setNewSnippet({...newSnippet, id: slugify(e.target.value)})} 
+                    disabled={isEditMode}
+                    className="w-full bg-slate-800 border border-slate-700 disabled:opacity-50 disabled:bg-slate-900 rounded-xl px-4 py-2 text-sm outline-none text-slate-200"
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase px-1">Title</label>
+                  <input 
+                    value={newSnippet.title} 
+                    onChange={e => handleTitleChange(e.target.value)} 
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm outline-none text-slate-200"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-slate-500 uppercase px-1">Type</label>
+                <select 
+                  value={newSnippet.type} 
+                  onChange={e => setNewSnippet({...newSnippet, type: e.target.value as any, mainFile: e.target.value === 'python' ? 'main.py' : (e.target.value === 'html' ? 'index.html' : (e.target.value === 'javascript' ? 'main.js' : 'command.txt'))})} 
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm outline-none text-slate-200 appearance-none"
+                >
+                  <option value="python">Python</option>
+                  <option value="cmd">CMD</option>
+                  <option value="html">HTML</option>
+                  <option value="javascript">JavaScript (Node.js)</option>
+                  <option value="react">React Component</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-slate-500 uppercase px-1">Description</label>
+                <input 
+                  value={newSnippet.description} 
+                  onChange={e => setNewSnippet({...newSnippet, description: e.target.value})} 
+                  placeholder="A brief explanation of what the snippet does..."
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm outline-none text-slate-200"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-slate-500 uppercase px-1">Tags (comma-separated)</label>
+                <input 
+                  value={tagsInput} 
+                  onChange={e => setTagsInput(e.target.value)} 
+                  placeholder="python, utility, file-helper"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm outline-none text-slate-200"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-slate-500 uppercase px-1">Code Content</label>
+                <textarea 
+                  value={newCode} 
+                  onChange={e => setNewCode(e.target.value)} 
+                  className="w-full h-48 bg-slate-950 border border-slate-800 rounded-xl p-4 text-xs font-mono outline-none text-slate-300 scrollbar-thin scrollbar-thumb-slate-800"
+                />
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-slate-800 pt-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-1">Execution Parameters</h3>
+                  <button 
+                    type="button"
+                    onClick={handleAddParameter}
+                    className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs font-semibold rounded-lg text-blue-400 border border-slate-700 transition-colors"
+                  >
+                    <Plus size={12} />
+                    <span>Add Parameter</span>
+                  </button>
+                </div>
+
+                {newSnippet.parameters.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic px-1">No parameters defined. Code placeholders like {'{param_name}'} will not be mapped automatically.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {newSnippet.parameters.map((param, index) => (
+                      <div key={index} className="flex gap-2 items-start bg-slate-950/40 p-3 rounded-xl border border-slate-800/80">
+                        <div className="grid grid-cols-3 gap-2 flex-1">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-slate-600 uppercase px-1">Name</label>
+                            <input 
+                              type="text"
+                              value={param.name}
+                              placeholder="e.g. name"
+                              onChange={e => handleNewSnippetParamChange(index, 'name', e.target.value)}
+                              className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs outline-none text-slate-200 focus:border-slate-700"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-slate-600 uppercase px-1">Default Value</label>
+                            <input 
+                              type="text"
+                              value={param.defaultValue}
+                              placeholder="e.g. World"
+                              onChange={e => handleNewSnippetParamChange(index, 'defaultValue', e.target.value)}
+                              className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs outline-none text-slate-200 focus:border-slate-700"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[9px] font-bold text-slate-600 uppercase px-1">Description (Optional)</label>
+                            <input 
+                              type="text"
+                              value={param.description || ''}
+                              placeholder="e.g. Name to greet"
+                              onChange={e => handleNewSnippetParamChange(index, 'description', e.target.value)}
+                              className="bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs outline-none text-slate-200 focus:border-slate-700"
+                            />
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveParameter(index)}
+                          className="mt-5 p-1.5 text-slate-500 hover:text-red-400 bg-slate-900/50 hover:bg-slate-900 border border-slate-800 rounded-lg transition-colors"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-800 flex justify-end gap-3">
+              <button onClick={() => setShowAddModal(false)} className="px-6 py-2.5 text-slate-400 hover:text-white font-bold transition-colors">Cancel</button>
+              <button onClick={handleSaveSnippet} className="px-8 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold shadow-lg transition-all active:scale-95">
+                {isEditMode ? 'Update' : 'Save Snippet'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

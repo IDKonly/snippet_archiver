@@ -18,16 +18,34 @@ export class SnippetExecutor {
     return iconv.decode(data, 'cp949');
   }
 
-  replaceParameters(code: string, params: Record<string, string>): string {
+  private escapeForCmd(val: string): string {
+    // Escape characters that have special meaning in CMD
+    // & | < > ^ ( ) % !
+    // We also wrap in double quotes if it contains spaces or special characters,
+    // but a simpler way is to escape them with ^.
+    // However, for echo {param}, if we want it to be a single argument, quotes are better.
+    // To be safe and simple, we'll escape the most dangerous ones.
+    return val.replace(/([&|<>^])/g, '^$1');
+  }
+
+  replaceParameters(code: string, params: Record<string, string>, type?: string): string {
     let result = code;
     for (const [key, value] of Object.entries(params)) {
+      let escapedValue = value;
+      if (type === 'cmd') {
+        escapedValue = this.escapeForCmd(value);
+      } else if (type === 'python' || type === 'javascript' || type === 'react') {
+        // For script languages, we escape for string literals (backslash escaping)
+        escapedValue = value.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/'/g, "\\'");
+      }
+      
       const regex = new RegExp(`{${key}}`, 'g');
-      result = result.replace(regex, value);
+      result = result.replace(regex, escapedValue);
     }
     return result;
   }
 
-  async executePython(code: string): Promise<string> {
+  async executePython(code: string, onOutput?: (type: 'stdout' | 'stderr', content: string) => void): Promise<string> {
     return tracer.startActiveSpan('executePython', async (span): Promise<string> => {
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snippet-'));
       const tempFile = path.join(tempDir, 'main.py');
@@ -38,22 +56,26 @@ export class SnippetExecutor {
 
         return new Promise((resolve, reject) => {
           const child = spawn('python', [tempFile]);
-          let output = '';
+          let fullOutput = '';
           let error = '';
 
           child.stdout.on('data', (data: Buffer) => {
-            output += this.decode(data);
+            const decoded = this.decode(data);
+            fullOutput += decoded;
+            if (onOutput) onOutput('stdout', decoded);
           });
 
           child.stderr.on('data', (data: Buffer) => {
-            error += this.decode(data);
+            const decoded = this.decode(data);
+            error += decoded;
+            if (onOutput) onOutput('stderr', decoded);
           });
 
           child.on('close', (code) => {
             fs.rm(tempDir, { recursive: true, force: true }).catch(e => logger.error(e));
             if (code === 0) {
               span.setStatus({ code: SpanStatusCode.OK });
-              resolve(output);
+              resolve(fullOutput);
             } else {
               span.setStatus({ code: SpanStatusCode.ERROR, message: error });
               reject(new Error(error || `Exit code ${code}`));
@@ -69,27 +91,31 @@ export class SnippetExecutor {
     });
   }
 
-  async executeCmd(command: string): Promise<string> {
+  async executeCmd(command: string, onOutput?: (type: 'stdout' | 'stderr', content: string) => void): Promise<string> {
     return tracer.startActiveSpan('executeCmd', async (span): Promise<string> => {
       logger.info({ command }, 'Executing CMD');
 
       return new Promise((resolve, reject) => {
         const child = spawn('cmd.exe', ['/c', command]);
-        let output = '';
+        let fullOutput = '';
         let error = '';
 
         child.stdout.on('data', (data: Buffer) => {
-          output += this.decode(data);
+          const decoded = this.decode(data);
+          fullOutput += decoded;
+          if (onOutput) onOutput('stdout', decoded);
         });
 
         child.stderr.on('data', (data: Buffer) => {
-          error += this.decode(data);
+          const decoded = this.decode(data);
+          error += decoded;
+          if (onOutput) onOutput('stderr', decoded);
         });
 
         child.on('close', (code) => {
           if (code === 0) {
             span.setStatus({ code: SpanStatusCode.OK });
-            resolve(output);
+            resolve(fullOutput);
           } else {
             span.setStatus({ code: SpanStatusCode.ERROR, message: error });
             reject(new Error(error || `Exit code ${code}`));
@@ -100,7 +126,7 @@ export class SnippetExecutor {
     });
   }
 
-  async executeJs(code: string): Promise<string> {
+  async executeJs(code: string, onOutput?: (type: 'stdout' | 'stderr', content: string) => void): Promise<string> {
     // Auto-detect if this is actually React code even if marked as JS
     if (code.includes('className=') || code.includes('useState') || code.includes('useEffect') || (code.includes('<') && code.includes('/>')) || code.includes('React.')) {
       logger.info('JSX/React detected in JS snippet, redirecting to React engine');
@@ -118,22 +144,26 @@ export class SnippetExecutor {
 
         return new Promise((resolve, reject) => {
           const child = spawn('node', [tempFile]);
-          let output = '';
+          let fullOutput = '';
           let error = '';
 
           child.stdout.on('data', (data: Buffer) => {
-            output += this.decode(data);
+            const decoded = this.decode(data);
+            fullOutput += decoded;
+            if (onOutput) onOutput('stdout', decoded);
           });
 
           child.stderr.on('data', (data: Buffer) => {
-            error += this.decode(data);
+            const decoded = this.decode(data);
+            error += decoded;
+            if (onOutput) onOutput('stderr', decoded);
           });
 
           child.on('close', (code) => {
             fs.rm(tempDir, { recursive: true, force: true }).catch(e => logger.error(e));
             if (code === 0) {
               span.setStatus({ code: SpanStatusCode.OK });
-              resolve(output);
+              resolve(fullOutput);
             } else {
               span.setStatus({ code: SpanStatusCode.ERROR, message: error });
               reject(new Error(error || `Exit code ${code}`));
@@ -181,7 +211,30 @@ export class SnippetExecutor {
     });
   }
 
-  transformReactCode(code: string): { transformedImports: string, cleanedCode: string } {
+  findComponentName(code: string): string | null {
+    // 1. Look for export default component name
+    const exportDefaultMatch = code.match(/export\s+default\s+([A-Z][a-zA-Z0-9_]*)/);
+    if (exportDefaultMatch) return exportDefaultMatch[1];
+
+    // 2. Look for export default function/class name
+    const exportDefaultDeclMatch = code.match(/export\s+default\s+(?:function|class)\s+([A-Z][a-zA-Z0-9_]*)/);
+    if (exportDefaultDeclMatch) return exportDefaultDeclMatch[1];
+
+    // 3. Look for function or class named App
+    if (/\b(?:function|class|const|let|var)\s+App\b/.test(code)) return 'App';
+
+    // 4. Look for any other function or class starting with capital letter
+    const anyComponentMatch = code.match(/\b(?:function|class)\s+([A-Z][a-zA-Z0-9_]*)/);
+    if (anyComponentMatch) return anyComponentMatch[1];
+
+    // 5. Look for const/let component declarations starting with capital letter
+    const constComponentMatch = code.match(/\b(?:const|let|var)\s+([A-Z][a-zA-Z0-9_]*)\s*=/);
+    if (constComponentMatch) return constComponentMatch[1];
+
+    return null;
+  }
+
+  transformReactCode(code: string): { transformedImports: string, cleanedCode: string, componentName: string | null } {
     const lines = code.split('\n');
     const importLines: string[] = [];
     const restLines: string[] = [];
@@ -219,11 +272,13 @@ export class SnippetExecutor {
       return `/* ${imp} */`;
     }).join('\n');
 
+    const componentName = this.findComponentName(code);
+
     const cleanedCode = restLines.join('\n')
       .replace(/export\s+default\s+/g, 'const App = ')
       .replace(/export\s+(const|let|var|function|class)\s+/g, '$1 ');
 
-    return { transformedImports, cleanedCode };
+    return { transformedImports, cleanedCode, componentName };
   }
 
   async executeReact(code: string): Promise<void> {
@@ -231,7 +286,7 @@ export class SnippetExecutor {
       const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snippet-react-'));
       const tempFile = path.join(tempDir, 'index.html');
       
-      const { transformedImports, cleanedCode } = this.transformReactCode(code);
+      const { transformedImports, cleanedCode, componentName } = this.transformReactCode(code);
 
       const htmlTemplate = `
 <!DOCTYPE html>
@@ -239,8 +294,11 @@ export class SnippetExecutor {
 <head>
     <meta charset="UTF-8" />
     <title>React Preview</title>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script>
+        window.react = window.React;
+    </script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/lucide-react@0.344.0/dist/umd/lucide-react.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -276,29 +334,22 @@ export class SnippetExecutor {
             // --- User Code ---
             ${cleanedCode}
             
+            // Auto-expose detected component to window.App
+            ${componentName ? `if (typeof ${componentName} !== 'undefined') { window.App = ${componentName}; }` : ''}
+            if (typeof App !== 'undefined') { window.App = App; }
+
             const renderTarget = document.getElementById('root');
             const root = ReactDOM.createRoot(renderTarget);
 
-            if (typeof App !== 'undefined') {
-                root.render(<App />);
+            if (window.App) {
+                root.render(React.createElement(window.App));
             } else {
-                const componentName = Object.keys(window).find(key => 
-                    typeof window[key] === 'function' && 
-                    /^[A-Z]/.test(key) && 
-                    !['React', 'ReactDOM', 'Babel', 'Lucide'].includes(key)
-                );
-                
-                if (componentName) {
-                    const Component = window[componentName];
-                    root.render(<Component />);
-                } else {
-                    renderTarget.innerHTML = \`
-                        <div class="error-overlay">
-                            <h1 style="font-size:1.5rem; font-weight:bold;">Component Detection Failed</h1>
-                            <p>No valid React component found to render. Please name your component 'App'.</p>
-                        </div>
-                    \`;
-                }
+                renderTarget.innerHTML = \`
+                    <div class="error-overlay">
+                        <h1 style="font-size:1.5rem; font-weight:bold;">Component Detection Failed</h1>
+                        <p>No valid React component found to render. Please name your component 'App' or export it as default.</p>
+                    </div>
+                \`;
             }
         } catch (e) {
             document.getElementById('root').innerHTML = \`
